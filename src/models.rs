@@ -17,7 +17,7 @@ pub struct PingResponse {
 
 #[derive(Debug, Clone, Eq, Deserialize, Serialize)]
 pub struct BleDevice {
-    pub address: BleAddress,
+    pub address: String,
     pub name: String,
     pub is_connected: bool,
 }
@@ -45,7 +45,7 @@ impl BleDevice {
         peripheral: &btleplug::platform::Peripheral,
     ) -> Result<Self, error::Error> {
         Ok(Self {
-            address: peripheral.address().into(),
+            address: peripheral.address().to_string(),
             name: peripheral
                 .properties()
                 .await?
@@ -57,42 +57,10 @@ impl BleDevice {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, Ord, Eq, PartialOrd, PartialEq, Hash, Default, Serialize, Deserialize,
-)]
-pub struct BleAddress {
-    pub address: [u8; 6],
+pub fn fmt_addr(addr: BDAddr) -> String {
+    let a = addr.into_inner();
+    format!(
+        "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+        a[0], a[1], a[2], a[3], a[4], a[5]
+    )
 }
-impl PartialEq<BDAddr> for BleAddress {
-    fn eq(&self, other: &BDAddr) -> bool {
-        self.address.eq(&other.into_inner())
-    }
-}
-impl From<BDAddr> for BleAddress {
-    fn from(addr: BDAddr) -> Self {
-        Self {
-            address: addr.into_inner(),
-        }
-    }
-}
-impl std::fmt::Display for BleAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let a = &self.address;
-        write!(
-            f,
-            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-            a[0], a[1], a[2], a[3], a[4], a[5]
-        )
-    }
-}
-impl BleAddress {
-    // Parses a Bluetooth address with colons `:` as delimiters.
-    pub fn from_str_delim(addr_str: &str) -> Result<Self, ParseBleAddressError> {
-        match BDAddr::from_str_delim(addr_str) {
-            Ok(addr) => Ok(addr.into()),
-            Err(_) => Err(ParseBleAddressError),
-        }
-    }
-}
-#[derive(Debug, Clone, Copy)]
-pub struct ParseBleAddressError;

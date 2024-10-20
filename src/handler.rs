@@ -1,4 +1,5 @@
-use crate::{error::Error, BleAddress, BleDevice};
+use crate::error::Error;
+use crate::models::{fmt_addr, BleDevice};
 use btleplug::api::CentralEvent;
 use btleplug::api::{
     Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
@@ -24,7 +25,7 @@ struct Listener {
 pub struct BleHandler {
     connected: Option<Arc<Peripheral>>,
     characs: Vec<Characteristic>,
-    devices: Mutex<HashMap<BleAddress, Peripheral>>,
+    devices: Mutex<HashMap<String, Peripheral>>,
     adapter: Adapter,
     listen_handle: Option<async_runtime::JoinHandle<()>>,
     notify_listeners: Arc<Mutex<Vec<Listener>>>,
@@ -49,7 +50,7 @@ impl BleHandler {
 
     pub async fn connect(
         &mut self,
-        address: BleAddress,
+        address: String,
         service: Uuid,
         characs: Vec<Uuid>,
         on_disconnect: Option<impl Fn() + Send + 'static>,
@@ -89,10 +90,10 @@ impl BleHandler {
         Ok(())
     }
 
-    async fn connect_device(&mut self, address: BleAddress) -> Result<(), Error> {
+    async fn connect_device(&mut self, address: String) -> Result<(), Error> {
         debug!("connecting to {address}",);
         if let Some(dev) = self.connected.clone() {
-            if address == dev.address() {
+            if address == fmt_addr(dev.address()) {
                 return Err(Error::AlreadyConnected.into());
             }
         }

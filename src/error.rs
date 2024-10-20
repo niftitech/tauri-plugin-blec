@@ -52,7 +52,7 @@ pub enum Error {
     WrongData,
 
     #[error("could not send devices: {0}")]
-    SendingDevices(SendError<Vec<crate::BleDevice>>),
+    SendingDevices(SendError<Vec<crate::models::BleDevice>>),
 
     #[error("could not join fuure: {0}")]
     JoinError(tokio::task::JoinError),

@@ -6,8 +6,6 @@ use tauri::{
     Runtime,
 };
 
-pub use models::*;
-
 mod commands;
 mod error;
 mod handler;

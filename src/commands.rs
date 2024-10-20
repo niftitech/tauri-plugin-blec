@@ -1,7 +1,7 @@
 use tauri::ipc::Channel;
 use tauri::{async_runtime, command, AppHandle, Runtime};
 
-use crate::error::Result;
+use crate::error::{self, Result};
 use crate::get_handler;
 use crate::models::BleDevice;
 
@@ -10,7 +10,7 @@ pub(crate) async fn scan<R: Runtime>(
     _app: AppHandle<R>,
     timeout: u64,
     on_devices: Channel<Vec<BleDevice>>,
-) -> Result<()> {
+) -> Result<Vec<BleDevice>> {
     let handler = get_handler()?;
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     async_runtime::spawn(async move {
@@ -20,8 +20,8 @@ pub(crate) async fn scan<R: Runtime>(
                 .expect("failed to send device to the front-end");
         }
     });
-    handler.discover(Some(tx), timeout).await?;
-    Ok(())
+    let devices = handler.discover(Some(tx), timeout).await?;
+    Ok(devices)
 }
 
 pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {

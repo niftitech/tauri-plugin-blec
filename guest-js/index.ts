@@ -1,18 +1,21 @@
 import { Channel, invoke } from '@tauri-apps/api/core'
 
-type BleDevice = {
+export type BleDevice = {
   address: string;
   name: string;
   isConnected: boolean;
 };
 
-export async function scan(timeout: Number, onDevicesHandler: (devices: BleDevice[]) => void): Promise<string | null> {
+type Result<T> = {
+  value?: T;
+  error?: string;
+}
+
+export async function scan(timeout: Number, onDevicesHandler: (devices: BleDevice[]) => void): Promise<Result<BleDevice[]>> {
   const onDevices = new Channel<BleDevice[]>();
   onDevices.onmessage = onDevicesHandler;
-  return await invoke<{ value?: string }>('plugin:blec|scan', {
-    payload: {
-      timeout,
-      onDevices
-    },
-  }).then((r) => (r.value ? r.value : null));
+  return await invoke<BleDevice[]>('plugin:blec|scan', {
+    timeout,
+    onDevices
+  }).then((res) => { return { value: res }; }).catch((err) => { return { error: err }; });
 }

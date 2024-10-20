@@ -1,22 +1,34 @@
 <script setup lang="ts">
 // This starter template is using Vue 3 <script setup> SFCs
 // Check out https://vuejs.org/api/sfc-script-setup.html#script-setup
-import { scan } from '../../../dist-js'
+import { scan, BleDevice } from 'tauri-plugin-blec'
+import { ref } from 'vue';
+import BleDev from './components/BleDev.vue'
+
+const devices = ref<BleDevice[]>([])
 
 function startScan() {
   console.log('start scan')
-  scan(1000, (devices) => {
+  scan(1000, (dev) => {
     console.log(devices)
+    devices.value = dev
   }).then((result) => {
     console.log(result)
   })
+}
+
+function connect(device: BleDevice) {
+  console.log('connect', device)
 }
 </script>
 
 <template>
   <div class="container">
     <h1>Welcome to the blec plugin!</h1>
-    <button :click="startScan">Start Scan</button>
+    <button :onclick="startScan">Start Scan</button>
+    <div v-for="device in devices" class="row">
+      <BleDev :key="device.address" :device="device" :onclick="() => connect(device)" />
+    </div>
   </div>
 </template>
 
