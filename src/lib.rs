@@ -1,48 +1,32 @@
+use handler::BleHandler;
+use once_cell::sync::OnceCell;
 use tauri::{
+    async_runtime,
     plugin::{Builder, TauriPlugin},
-    Manager, Runtime,
+    Runtime,
 };
 
 pub use models::*;
 
-#[cfg(desktop)]
-mod desktop;
-#[cfg(mobile)]
-mod mobile;
-
 mod commands;
 mod error;
+mod handler;
 mod models;
 
-pub use error::{Error, Result};
-
-#[cfg(desktop)]
-use desktop::Blec;
-#[cfg(mobile)]
-use mobile::Blec;
-
-/// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the blec APIs.
-pub trait BlecExt<R: Runtime> {
-    fn blec(&self) -> &Blec<R>;
-}
-
-impl<R: Runtime, T: Manager<R>> crate::BlecExt<R> for T {
-    fn blec(&self) -> &Blec<R> {
-        self.state::<Blec<R>>().inner()
-    }
-}
-
+static HANDLER: OnceCell<BleHandler> = OnceCell::new();
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
+    HANDLER
+        .set(async_runtime::block_on(BleHandler::new()).expect("failed to initialize handler"))
+        .ok()
+        .expect("handler already initialized");
+
     Builder::new("blec")
-        .invoke_handler(tauri::generate_handler![commands::ping])
-        .setup(|app, api| {
-            #[cfg(mobile)]
-            let blec = mobile::init(app, api)?;
-            #[cfg(desktop)]
-            let blec = desktop::init(app, api)?;
-            app.manage(blec);
-            Ok(())
-        })
+        .invoke_handler(commands::commands())
         .build()
+}
+
+pub fn get_handler() -> error::Result<&'static BleHandler> {
+    let handler = HANDLER.get().ok_or(error::Error::HandlerNotInitialized)?;
+    Ok(handler)
 }

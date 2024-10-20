@@ -1,9 +1,18 @@
-import { invoke } from '@tauri-apps/api/core'
+import { Channel, invoke } from '@tauri-apps/api/core'
 
-export async function ping(value: string): Promise<string | null> {
-  return await invoke<{value?: string}>('plugin:blec|ping', {
+type BleDevice = {
+  address: string;
+  name: string;
+  isConnected: boolean;
+};
+
+export async function scan(timeout: Number, onDevicesHandler: (devices: BleDevice[]) => void): Promise<string | null> {
+  const onDevices = new Channel<BleDevice[]>();
+  onDevices.onmessage = onDevicesHandler;
+  return await invoke<{ value?: string }>('plugin:blec|scan', {
     payload: {
-      value,
+      timeout,
+      onDevices
     },
   }).then((r) => (r.value ? r.value : null));
 }

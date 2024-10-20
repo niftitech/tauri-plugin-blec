@@ -2,7 +2,7 @@
 
 Default permissions for the plugin
 
-- `allow-ping`
+- `allow-scan`
 
 ## Permission Table
 
@@ -35,6 +35,32 @@ Enables the ping command without any pre-configured scope.
 <td>
 
 Denies the ping command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-scan`
+
+</td>
+<td>
+
+Enables the scan command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-scan`
+
+</td>
+<td>
+
+Denies the scan command without any pre-configured scope.
 
 </td>
 </tr>

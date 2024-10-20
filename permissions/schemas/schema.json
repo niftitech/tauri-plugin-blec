@@ -305,6 +305,16 @@
           "const": "deny-ping"
         },
         {
+          "description": "Enables the scan command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-scan"
+        },
+        {
+          "description": "Denies the scan command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-scan"
+        },
+        {
           "description": "Default permissions for the plugin",
           "type": "string",
           "const": "default"
