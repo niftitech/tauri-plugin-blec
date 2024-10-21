@@ -62,7 +62,7 @@ pub enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[cfg(mobile)]
+    #[cfg(target_os = "android")]
     #[error(transparent)]
     PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),
 }

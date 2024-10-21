@@ -9,8 +9,8 @@ import app.tauri.plugin.Plugin
 import app.tauri.plugin.Invoke
 
 @InvokeArg
-class PingArgs {
-  var value: String? = null
+class ScanFilter {
+    val services: List<String>? = null
 }
 
 @TauriPlugin
@@ -18,11 +18,12 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     private val implementation = BleClient()
 
     @Command
-    fun ping(invoke: Invoke) {
-        val args = invoke.parseArgs(PingArgs::class.java)
+    fun start_scan(invoke: Invoke) {
+        val args = invoke.parseArgs(ScanFilter::class.java)
+        println("Services:" + args.services.toString())
 
         val ret = JSObject()
-        ret.put("value", implementation.pong(args.value ?: "default value :("))
+        ret.put("status", "ok")
         invoke.resolve(ret)
     }
 }

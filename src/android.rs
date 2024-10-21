@@ -1,22 +1,33 @@
-type Result<T> = std::result::Result<T, btleplug::Error>;
 use std::{collections::BTreeSet, pin::Pin, vec};
 
 use async_trait::async_trait;
 use btleplug::{
     api::{
         BDAddr, CentralEvent, CentralState, Characteristic, Descriptor, PeripheralProperties,
-        ScanFilter, Service, ValueNotification, WriteType,
+        Service, ValueNotification, WriteType,
     },
     platform::PeripheralId,
 };
 use futures::{stream::Once, Stream};
 use once_cell::sync::OnceCell;
-use tauri::AppHandle;
+use tauri::{plugin::PluginHandle, AppHandle, Manager as _, Wry};
+use uuid::Uuid;
 
-static APP_HANDLE: OnceCell<AppHandle> = OnceCell::new();
+type Result<T> = std::result::Result<T, btleplug::Error>;
 
-pub fn set_app_handle(app_handle: AppHandle) {
-    APP_HANDLE.set(app_handle).unwrap();
+static HANDLE: OnceCell<PluginHandle<Wry>> = OnceCell::new();
+
+fn get_handle() -> &'static PluginHandle<Wry> {
+    HANDLE.get().expect("plugin handle not initialized")
+}
+
+pub fn init<C: serde::de::DeserializeOwned>(
+    app: &AppHandle<Wry>,
+    api: tauri::plugin::PluginApi<Wry, C>,
+) -> std::result::Result<(), crate::error::Error> {
+    let handle = api.register_android_plugin("com.plugin.blec", "BleClientPlugin")?;
+    HANDLE.set(handle).unwrap();
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -30,8 +41,20 @@ impl btleplug::api::Central for Adapter {
         todo!()
     }
 
-    async fn start_scan(&self, filter: ScanFilter) -> Result<()> {
-        todo!()
+    async fn start_scan(&self, filter: btleplug::api::ScanFilter) -> Result<()> {
+        #[derive(serde::Serialize)]
+        struct ScanFilter {
+            services: Vec<Uuid>,
+        }
+        get_handle()
+            .run_mobile_plugin(
+                "start_scan",
+                ScanFilter {
+                    services: filter.services,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(())
     }
 
     async fn stop_scan(&self) -> Result<()> {

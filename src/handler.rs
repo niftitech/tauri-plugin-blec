@@ -17,6 +17,8 @@ use uuid::Uuid;
 
 #[cfg(target_os = "android")]
 use crate::android::{Adapter, Manager, Peripheral};
+#[cfg(target_os = "android")]
+use btleplug::api::{Central as _, Manager as _, Peripheral as _};
 #[cfg(not(target_os = "android"))]
 use btleplug::platform::{Adapter, Manager, Peripheral};
 
