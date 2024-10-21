@@ -35,19 +35,16 @@ pub struct BleHandler {
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
 }
 
-#[cfg(not(target_os = "android"))]
-fn get_central() -> Result<Adapter, Error> {
-    let manager = Manager::new()?;
-    let adapters = manager.adapters()?;
+async fn get_central() -> Result<Adapter, Error> {
+    let manager = Manager::new().await?;
+    let adapters = manager.adapters().await?;
     let central = adapters.into_iter().next().ok_or(Error::NoAdapters)?;
     Ok(central)
 }
-#[cfg(target_os = "android")]
-use android::get_central;
 
 impl BleHandler {
     pub async fn new() -> Result<Self, Error> {
-        let central = get_central()?;
+        let central = get_central().await?;
         Ok(Self {
             devices: Mutex::new(HashMap::new()),
             characs: vec![],
@@ -255,7 +252,7 @@ impl BleHandler {
 
     pub async fn connected_device(&self) -> Result<BleDevice, Error> {
         let p = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
-        let d = BleDevice::from_peripheral(&p).await?;
+        let d = BleDevice::from_peripheral(&**p).await?;
         Ok(d)
     }
 }

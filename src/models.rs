@@ -1,4 +1,4 @@
-use btleplug::api::{BDAddr, Peripheral};
+use btleplug::api::BDAddr;
 use serde::{Deserialize, Serialize};
 
 use crate::error;
@@ -41,8 +41,8 @@ impl PartialEq for BleDevice {
 }
 
 impl BleDevice {
-    pub async fn from_peripheral(
-        peripheral: &btleplug::platform::Peripheral,
+    pub async fn from_peripheral<P: btleplug::api::Peripheral>(
+        peripheral: &P,
     ) -> Result<Self, error::Error> {
         Ok(Self {
             address: peripheral.address().to_string(),
