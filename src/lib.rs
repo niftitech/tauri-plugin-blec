@@ -16,10 +16,8 @@ mod models;
 static HANDLER: OnceCell<BleHandler> = OnceCell::new();
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
-    HANDLER
-        .set(async_runtime::block_on(BleHandler::new()).expect("failed to initialize handler"))
-        .ok()
-        .expect("handler already initialized");
+    let _ = HANDLER
+        .set(async_runtime::block_on(BleHandler::new()).expect("failed to initialize handler"));
 
     Builder::new("blec")
         .invoke_handler(commands::commands())

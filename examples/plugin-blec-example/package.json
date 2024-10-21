@@ -13,7 +13,7 @@
     "vue": "^3.3.4",
     "@tauri-apps/api": ">=2.0.0",
     "@tauri-apps/plugin-shell": ">=2.0.0",
-    "tauri-plugin-blec": "file:tauri-plugin-blec"
+    "tauri-plugin-blec": "file:../../"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.5",

@@ -15,7 +15,7 @@ class PingArgs {
 
 @TauriPlugin
 class BleClientPlugin(private val activity: Activity): Plugin(activity) {
-    private val implementation = Example()
+    private val implementation = BleClient()
 
     @Command
     fun ping(invoke: Invoke) {

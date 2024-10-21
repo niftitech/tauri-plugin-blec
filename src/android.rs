@@ -1,5 +1,5 @@
 type Result<T> = std::result::Result<T, btleplug::Error>;
-use std::{collections::BTreeSet, pin::Pin};
+use std::{collections::BTreeSet, pin::Pin, vec};
 
 use async_trait::async_trait;
 use btleplug::{
@@ -9,7 +9,15 @@ use btleplug::{
     },
     platform::PeripheralId,
 };
-use futures::Stream;
+use futures::{stream::Once, Stream};
+use once_cell::sync::OnceCell;
+use tauri::AppHandle;
+
+static APP_HANDLE: OnceCell<AppHandle> = OnceCell::new();
+
+pub fn set_app_handle(app_handle: AppHandle) {
+    APP_HANDLE.set(app_handle).unwrap();
+}
 
 #[derive(Debug, Clone)]
 pub struct Adapter;
@@ -55,7 +63,7 @@ pub struct Manager;
 
 impl Manager {
     pub async fn new() -> Result<Self> {
-        todo!()
+        Ok(Manager)
     }
 }
 
@@ -64,7 +72,7 @@ impl btleplug::api::Manager for Manager {
     type Adapter = Adapter;
 
     async fn adapters(&self) -> Result<Vec<Adapter>> {
-        todo!()
+        Ok(vec![Adapter])
     }
 }
 
