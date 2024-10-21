@@ -6,6 +6,8 @@ use tauri::{
     Runtime,
 };
 
+#[cfg(target_os = "android")]
+mod android;
 mod commands;
 mod error;
 mod handler;

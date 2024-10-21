@@ -4,7 +4,6 @@ use btleplug::api::CentralEvent;
 use btleplug::api::{
     Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
 };
-use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::{FutureExt, Stream, StreamExt};
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -12,10 +11,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::async_runtime;
 use tokio::sync::{mpsc, Mutex};
-use tokio::task::AbortHandle;
 use tokio::time::sleep;
 use tracing::debug;
 use uuid::Uuid;
+
+#[cfg(target_os = "android")]
+use crate::android::{Adapter, Manager, Peripheral};
+#[cfg(not(target_os = "android"))]
+use btleplug::platform::{Adapter, Manager, Peripheral};
 
 struct Listener {
     uuid: Uuid,
@@ -32,11 +35,19 @@ pub struct BleHandler {
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
 }
 
+#[cfg(not(target_os = "android"))]
+fn get_central() -> Result<Adapter, Error> {
+    let manager = Manager::new()?;
+    let adapters = manager.adapters()?;
+    let central = adapters.into_iter().next().ok_or(Error::NoAdapters)?;
+    Ok(central)
+}
+#[cfg(target_os = "android")]
+use android::get_central;
+
 impl BleHandler {
     pub async fn new() -> Result<Self, Error> {
-        let manager = Manager::new().await?;
-        let adapters = manager.adapters().await?;
-        let central = adapters.into_iter().next().ok_or(Error::NoAdapters)?;
+        let central = get_central()?;
         Ok(Self {
             devices: Mutex::new(HashMap::new()),
             characs: vec![],
