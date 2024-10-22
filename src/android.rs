@@ -10,7 +10,11 @@ use btleplug::{
 };
 use futures::{stream::Once, Stream};
 use once_cell::sync::OnceCell;
-use tauri::{plugin::PluginHandle, AppHandle, Manager as _, Wry};
+use tauri::{
+    ipc::{Channel, InvokeResponseBody},
+    plugin::PluginHandle,
+    AppHandle, Manager as _, Wry,
+};
 use uuid::Uuid;
 
 type Result<T> = std::result::Result<T, btleplug::Error>;
@@ -33,6 +37,11 @@ pub fn init<C: serde::de::DeserializeOwned>(
 #[derive(Debug, Clone)]
 pub struct Adapter;
 
+fn on_device_callback(response: InvokeResponseBody) -> std::result::Result<(), tauri::Error> {
+    tracing::info!("on_device_callback: {:?}", response);
+    Ok(())
+}
+
 #[async_trait]
 impl btleplug::api::Central for Adapter {
     type Peripheral = Peripheral;
@@ -43,14 +52,18 @@ impl btleplug::api::Central for Adapter {
 
     async fn start_scan(&self, filter: btleplug::api::ScanFilter) -> Result<()> {
         #[derive(serde::Serialize)]
-        struct ScanFilter {
+        #[serde(rename_all = "camelCase")]
+        struct ScanParams {
             services: Vec<Uuid>,
+            on_device: Channel<serde_json::Value>,
         }
+        let on_device = Channel::new(on_device_callback);
         get_handle()
             .run_mobile_plugin(
                 "start_scan",
-                ScanFilter {
+                ScanParams {
                     services: filter.services,
+                    on_device,
                 },
             )
             .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
@@ -58,11 +71,15 @@ impl btleplug::api::Central for Adapter {
     }
 
     async fn stop_scan(&self) -> Result<()> {
-        todo!()
+        get_handle()
+            .run_mobile_plugin("stop_scan", serde_json::Value::Null)
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(())
     }
 
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>> {
-        todo!()
+        // TODO: Implement this
+        Ok(vec![])
     }
 
     async fn peripheral(&self, id: &PeripheralId) -> Result<Self::Peripheral> {

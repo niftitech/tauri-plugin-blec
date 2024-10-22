@@ -2,3 +2,4 @@
 /.tauri
 /.gradle
 /gradle
+/local.properties

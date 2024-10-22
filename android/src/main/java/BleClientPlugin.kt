@@ -1,29 +1,25 @@
 package com.plugin.blec
 
+
 import android.app.Activity
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
-import app.tauri.plugin.JSObject
-import app.tauri.plugin.Plugin
 import app.tauri.plugin.Invoke
+import app.tauri.plugin.Plugin
 
-@InvokeArg
-class ScanFilter {
-    val services: List<String>? = null
-}
 
 @TauriPlugin
 class BleClientPlugin(private val activity: Activity): Plugin(activity) {
-    private val implementation = BleClient()
+    private val client = BleClient(activity)
 
     @Command
     fun start_scan(invoke: Invoke) {
-        val args = invoke.parseArgs(ScanFilter::class.java)
-        println("Services:" + args.services.toString())
+        client.startScan(invoke)
+    }
 
-        val ret = JSObject()
-        ret.put("status", "ok")
-        invoke.resolve(ret)
+    @Command
+    fun stop_scan(invoke: Invoke){
+        client.stopScan(invoke)
     }
 }

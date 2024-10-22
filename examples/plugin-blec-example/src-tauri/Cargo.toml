@@ -22,5 +22,7 @@ tauri = { version = "2.0.0", features = [] }
 tauri-plugin-shell = "2.0.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tracing = { version = "0.1.40", features = ["log"] }
 
 tauri-plugin-blec = { path = "../../../" }
+tauri-plugin-log = "2"

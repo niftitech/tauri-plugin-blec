@@ -4,17 +4,29 @@
 import { scan, BleDevice } from 'tauri-plugin-blec'
 import { ref } from 'vue';
 import BleDev from './components/BleDev.vue'
+import { Channel, invoke } from '@tauri-apps/api/core';
 
 const devices = ref<BleDevice[]>([])
-
-function startScan() {
+interface Devices {
+  devices: BleDevice[]
+}
+async function startScan() {
   console.log('start scan')
-  scan(1000, (dev) => {
-    console.log(devices)
-    devices.value = dev
-  }).then((result) => {
-    console.log(result)
-  })
+  // scan(1000, (dev) => {
+  //   console.log(devices)
+  //   devices.value = dev
+  // }).then((result) => {
+  //   console.log(result)
+  // })
+  let onDevices = new Channel<Devices>()
+  onDevices.onmessage = (d: Devices) => {
+    console.log('onDevices', d)
+    devices.value = d.devices
+  }
+  console.log(await invoke<Devices>('plugin:blec|scan', {
+      timeout:1000,
+      onDevices
+    }))
 }
 
 function connect(device: BleDevice) {

@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
-    "blec:default"
+    "blec:default",
+    "log:default"
   ]
 }
