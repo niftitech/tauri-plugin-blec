@@ -8,20 +8,36 @@ import app.tauri.annotation.InvokeArg
 import app.tauri.plugin.Invoke
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
 import android.bluetooth.le.ScanFilter.Builder;
 import android.bluetooth.le.ScanResult
+import android.content.Context.MODE_PRIVATE
+import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.ParcelUuid
+import android.provider.Settings
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
+import androidx.core.app.ActivityCompat.startActivityForResult
+import androidx.core.content.ContextCompat.getSystemService
 import app.tauri.plugin.Channel
 import app.tauri.plugin.JSObject
 
-class BleDevice{
-
+class BleDevice(
+    val address: String
+){
+    fun toJsObject():JSObject{
+        var obj = JSObject()
+        obj.put("address",address)
+        return obj
+    }
 }
 
 @InvokeArg
@@ -31,20 +47,86 @@ class ScanParams {
 }
 
 class BleClient(private val activity: Activity) {
-    var scanResults: ArrayList<ScanResult> = ArrayList()
-    var scanner: BluetoothLeScanner? = null;
+    private var scanner: BluetoothLeScanner? = null;
+    private var scanCb: ScanCallback? = null;
 
+    private fun markFirstPermissionRequest(perm: String) {
+        val sharedPreference: SharedPreferences =
+            activity.getSharedPreferences("PREFS_PERMISSION_FIRST_TIME_ASKING", MODE_PRIVATE)
+        sharedPreference.edit().putBoolean(perm, false).apply()
+    }
+
+    private fun firstPermissionRequest(perm: String): Boolean {
+        return activity.getSharedPreferences("PREFS_PERMISSION_FIRST_TIME_ASKING", MODE_PRIVATE)
+            .getBoolean(perm, true)
+    }
+
+    private fun checkPermissions(): Boolean {
+
+        for (perm in if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.BLUETOOTH,
+            )
+        }) {
+            if (ActivityCompat.checkSelfPermission(
+                    activity,
+                    perm
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                if (firstPermissionRequest(perm) || activity.shouldShowRequestPermissionRationale(perm)) {
+                    // this will open the permission dialog
+                    markFirstPermissionRequest(perm)
+                    activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+                } else{
+                    // this will open settings which asks for permission
+                    val intent = Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${activity.packageName}")
+                    )
+                    activity.startActivity(intent)
+                    Toast.makeText(activity, "Allow Permission: $perm", Toast.LENGTH_SHORT).show()
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    @SuppressLint("MissingPermission")
     fun startScan(invoke: Invoke) {
-        val args = invoke.parseArgs(ScanParams::class.java)
-        println("args:"+args.onDevice.toString())
+        // check if running
+        if (scanCb != null){
+            invoke.reject("Scan already running")
+            return
+        }
+        // check permission
+        if (!checkPermissions()){
+            invoke.reject("Missing permissions");
+            return
+        }
 
+        // get scanner
         if (scanner == null) {
-            val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-                ?: throw RuntimeException("No bluetooth adapter available.")
-
+            val bluetoothManager: BluetoothManager = getSystemService(activity, BluetoothManager::class.java)
+                ?: throw RuntimeException("No bluetooth manager found")
+            val bluetoothAdapter: BluetoothAdapter = bluetoothManager.getAdapter()
+                ?: throw RuntimeException("No bluetooth adapter available")
+            // check if bluetooth is on
+            if (!bluetoothAdapter.isEnabled ) {
+                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                startActivityForResult(activity, enableBtIntent,0,null)
+            }
             scanner = bluetoothAdapter.bluetoothLeScanner
                 ?: throw RuntimeException("No bluetooth scanner available for adapter")
         }
+
+        val args = invoke.parseArgs(ScanParams::class.java)
         var filters: ArrayList<ScanFilter?>? = null
         if (args.services.size > 0) {
             filters = ArrayList()
@@ -55,36 +137,40 @@ class BleClient(private val activity: Activity) {
         val settings = ScanSettings.Builder()
             .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .build()
-        if (ActivityCompat.checkSelfPermission(
-                activity,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            invoke.reject("Missing BLE Permission")
-            return
-        }
-        scanner?.startScan(filters, settings, object: ScanCallback(){
-            override fun onScanResult(callbackType: Int, result: ScanResult){
-                println(result.toString())
-                var dev = JSObject()
-                dev.put("device",result)
-                args.onDevice?.send(dev)
+
+        scanCb = object: ScanCallback(){
+            private fun sendResult(result: ScanResult){
+                val device = BleDevice(
+                    result.device.address
+                )
+                val res = JSObject()
+                res.put("result", device.toJsObject())
+                args.onDevice!!.send(res)
             }
-        })
+            override fun onBatchScanResults(results: List<ScanResult>){
+                for(result in results){
+                    sendResult(result)
+                }
+            }
+            override fun onScanFailed(errorCode: Int){
+                println("Scan failed with error code $errorCode")
+            }
+            override fun onScanResult(callbackType: Int, result: ScanResult){
+                sendResult(result)
+            }
+        }
+        scanner?.startScan(filters, settings, scanCb!!)
 
         invoke.resolve()
     }
 
     @SuppressLint("MissingPermission")
     fun stopScan(invoke: Invoke){
-        scanner?.stopScan(object: ScanCallback(){})
+        println("stopScan")
+        if (scanCb!=null) {
+            scanner?.stopScan(scanCb!!)
+            scanCb = null
+        }
         invoke.resolve()
     }
 }

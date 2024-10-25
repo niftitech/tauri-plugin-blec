@@ -24,9 +24,14 @@ async function startScan() {
     devices.value = d.devices
   }
   console.log(await invoke<Devices>('plugin:blec|scan', {
-      timeout:1000,
-      onDevices
-    }))
+    timeout: 1000,
+    onDevices
+  }))
+}
+
+async function stopScan() {
+  console.log('stop scan')
+  await invoke('plugin:blec|stop_scan')
 }
 
 function connect(device: BleDevice) {
@@ -38,6 +43,7 @@ function connect(device: BleDevice) {
   <div class="container">
     <h1>Welcome to the blec plugin!</h1>
     <button :onclick="startScan">Start Scan</button>
+    <button :onclick="stopScan">Stop Scan</button>
     <div v-for="device in devices" class="row">
       <BleDev :key="device.address" :device="device" :onclick="() => connect(device)" />
     </div>

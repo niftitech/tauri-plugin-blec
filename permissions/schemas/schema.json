@@ -315,6 +315,16 @@
           "const": "deny-scan"
         },
         {
+          "description": "Enables the stop_scan command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-scan"
+        },
+        {
+          "description": "Denies the stop_scan command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-scan"
+        },
+        {
           "description": "Default permissions for the plugin",
           "type": "string",
           "const": "default"

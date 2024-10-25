@@ -173,6 +173,12 @@ impl BleHandler {
         Ok(devices)
     }
 
+    /// Stops scanning for devices
+    pub async fn stop_scan(&self) -> Result<(), Error> {
+        self.adapter.stop_scan().await?;
+        Ok(())
+    }
+
     async fn add_devices(&self, discovered: Vec<Peripheral>) -> Vec<BleDevice> {
         let mut devices = vec![];
         for p in discovered {

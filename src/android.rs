@@ -1,5 +1,3 @@
-use std::{collections::BTreeSet, pin::Pin, vec};
-
 use async_trait::async_trait;
 use btleplug::{
     api::{
@@ -10,6 +8,8 @@ use btleplug::{
 };
 use futures::{stream::Once, Stream};
 use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
+use std::{collections::BTreeSet, pin::Pin, vec};
 use tauri::{
     ipc::{Channel, InvokeResponseBody},
     plugin::PluginHandle,
@@ -117,7 +117,9 @@ impl btleplug::api::Manager for Manager {
 }
 
 #[derive(Debug, Clone)]
-pub struct Peripheral;
+pub struct Peripheral {
+    address: BDAddr,
+}
 
 #[async_trait::async_trait]
 impl btleplug::api::Peripheral for Peripheral {

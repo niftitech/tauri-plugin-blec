@@ -8,7 +8,7 @@ use tauri::{
     Manager, Runtime, Wry,
 };
 
-#[cfg(target_os = "android")]
+// #[cfg(target_os = "android")]
 mod android;
 mod commands;
 mod error;

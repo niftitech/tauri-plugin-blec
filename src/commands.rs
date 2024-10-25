@@ -30,6 +30,14 @@ pub(crate) async fn scan<R: Runtime>(
     Ok(devices)
 }
 
+#[command]
+pub(crate) async fn stop_scan<R: Runtime>(_app: AppHandle<R>) -> Result<()> {
+    tracing::info!("Stopping BLE scan");
+    let handler = get_handler()?;
+    handler.stop_scan().await?;
+    Ok(())
+}
+
 pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
-    tauri::generate_handler![scan]
+    tauri::generate_handler![scan, stop_scan]
 }

@@ -1,8 +1,7 @@
-const COMMANDS: &[&str] = &["scan"];
+const COMMANDS: &[&str] = &["scan", "stop_scan"];
 
 fn main() {
     tauri_plugin::Builder::new(COMMANDS)
         .android_path("android")
-        .ios_path("ios")
         .build();
 }

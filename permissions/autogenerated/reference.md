@@ -3,6 +3,7 @@
 Default permissions for the plugin
 
 - `allow-scan`
+- `allow-stop-scan`
 
 ## Permission Table
 
@@ -61,6 +62,32 @@ Enables the scan command without any pre-configured scope.
 <td>
 
 Denies the scan command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-stop-scan`
+
+</td>
+<td>
+
+Enables the stop_scan command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-stop-scan`
+
+</td>
+<td>
+
+Denies the stop_scan command without any pre-configured scope.
 
 </td>
 </tr>
