@@ -7,14 +7,19 @@ use btleplug::{
     platform::PeripheralId,
 };
 use futures::{stream::Once, Stream};
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, pin::Pin, vec};
+use std::{
+    collections::{BTreeSet, HashMap},
+    pin::Pin,
+    vec,
+};
 use tauri::{
     ipc::{Channel, InvokeResponseBody},
     plugin::PluginHandle,
     AppHandle, Manager as _, Wry,
 };
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 type Result<T> = std::result::Result<T, btleplug::Error>;
@@ -36,9 +41,18 @@ pub fn init<C: serde::de::DeserializeOwned>(
 
 #[derive(Debug, Clone)]
 pub struct Adapter;
+static DEVICES: Lazy<RwLock<HashMap<String, Peripheral>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
 fn on_device_callback(response: InvokeResponseBody) -> std::result::Result<(), tauri::Error> {
     tracing::info!("on_device_callback: {:?}", response);
+    let device: Peripheral = response.deserialize()?;
+    let mut devices = DEVICES.blocking_write();
+    if let Some(enty) = devices.get_mut(&device.address) {
+        *enty = device;
+    } else {
+        devices.insert(device.address.clone(), device);
+    }
     Ok(())
 }
 
@@ -78,16 +92,27 @@ impl btleplug::api::Central for Adapter {
     }
 
     async fn peripherals(&self) -> Result<Vec<Self::Peripheral>> {
-        // TODO: Implement this
-        Ok(vec![])
+        Ok(DEVICES.read().await.values().cloned().collect())
     }
 
     async fn peripheral(&self, id: &PeripheralId) -> Result<Self::Peripheral> {
-        todo!()
+        DEVICES
+            .read()
+            .await
+            .get(&id.to_string())
+            .cloned()
+            .ok_or(btleplug::Error::DeviceNotFound)
     }
 
     async fn add_peripheral(&self, address: &PeripheralId) -> Result<Self::Peripheral> {
-        todo!()
+        let dev = Peripheral {
+            address: address.to_string(),
+        };
+        DEVICES
+            .write()
+            .await
+            .insert(address.to_string(), dev.clone());
+        Ok(dev)
     }
 
     async fn adapter_info(&self) -> Result<String> {
@@ -116,9 +141,9 @@ impl btleplug::api::Manager for Manager {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Peripheral {
-    address: BDAddr,
+    address: String,
 }
 
 #[async_trait::async_trait]
