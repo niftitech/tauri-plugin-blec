@@ -3,11 +3,11 @@ package com.plugin.blec
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.util.Log
 import app.tauri.annotation.InvokeArg
 import app.tauri.plugin.Invoke
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
@@ -31,11 +31,18 @@ import app.tauri.plugin.Channel
 import app.tauri.plugin.JSObject
 
 class BleDevice(
-    val address: String
+    val address: String,
+    private val name: String,
+    private val rssi: Int,
+    private val connected: Boolean,
 ){
     fun toJsObject():JSObject{
-        var obj = JSObject()
+        val obj = JSObject()
         obj.put("address",address)
+        obj.put("id",address)
+        obj.put("name",name)
+        obj.put("connected",connected)
+        obj.put("rssi",rssi)
         return obj
     }
 }
@@ -48,7 +55,9 @@ class ScanParams {
 
 class BleClient(private val activity: Activity) {
     private var scanner: BluetoothLeScanner? = null;
+    private var manager: BluetoothManager? = null;
     private var scanCb: ScanCallback? = null;
+    private var devices: MutableMap<String,BluetoothDevice> = mutableMapOf();
 
     private fun markFirstPermissionRequest(perm: String) {
         val sharedPreference: SharedPreferences =
@@ -113,9 +122,9 @@ class BleClient(private val activity: Activity) {
 
         // get scanner
         if (scanner == null) {
-            val bluetoothManager: BluetoothManager = getSystemService(activity, BluetoothManager::class.java)
+            manager = getSystemService(activity, BluetoothManager::class.java)
                 ?: throw RuntimeException("No bluetooth manager found")
-            val bluetoothAdapter: BluetoothAdapter = bluetoothManager.getAdapter()
+            val bluetoothAdapter: BluetoothAdapter = manager!!.adapter
                 ?: throw RuntimeException("No bluetooth adapter available")
             // check if bluetooth is on
             if (!bluetoothAdapter.isEnabled ) {
@@ -125,6 +134,9 @@ class BleClient(private val activity: Activity) {
             scanner = bluetoothAdapter.bluetoothLeScanner
                 ?: throw RuntimeException("No bluetooth scanner available for adapter")
         }
+
+        // clear old devices
+        this.devices.clear()
 
         val args = invoke.parseArgs(ScanParams::class.java)
         var filters: ArrayList<ScanFilter?>? = null
@@ -140,9 +152,23 @@ class BleClient(private val activity: Activity) {
 
         scanCb = object: ScanCallback(){
             private fun sendResult(result: ScanResult){
+                val name = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    result.device.alias
+                } else {
+                    result.device.name
+                };
+                if (name == null) {
+                    // TODO: think about other filtering instead
+                    return;
+                }
                 val device = BleDevice(
-                    result.device.address
+                    result.device.address,
+                    name,
+                    result.rssi,
+                    // TODO: check if connected
+                    false
                 )
+                this@BleClient.devices[device.address] = result.device
                 val res = JSObject()
                 res.put("result", device.toJsObject())
                 args.onDevice!!.send(res)

@@ -11,6 +11,7 @@ use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
+    fmt::Display,
     pin::Pin,
     vec,
 };
@@ -41,17 +42,28 @@ pub fn init<C: serde::de::DeserializeOwned>(
 
 #[derive(Debug, Clone)]
 pub struct Adapter;
-static DEVICES: Lazy<RwLock<HashMap<String, Peripheral>>> =
+static DEVICES: Lazy<RwLock<HashMap<PeripheralId, Peripheral>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
+#[derive(serde::Deserialize)]
+struct PeripheralResult {
+    result: Peripheral,
+}
+
 fn on_device_callback(response: InvokeResponseBody) -> std::result::Result<(), tauri::Error> {
-    tracing::info!("on_device_callback: {:?}", response);
-    let device: Peripheral = response.deserialize()?;
+    let device = match response.deserialize::<PeripheralResult>() {
+        Ok(PeripheralResult { result }) => result,
+        Err(e) => {
+            tracing::error!("failed to deserialize peripheral: {:?}", e);
+            return Ok(());
+        }
+    };
     let mut devices = DEVICES.blocking_write();
-    if let Some(enty) = devices.get_mut(&device.address) {
+    tracing::info!("device: {device:?}");
+    if let Some(enty) = devices.get_mut(&device.id) {
         *enty = device;
     } else {
-        devices.insert(device.address.clone(), device);
+        devices.insert(device.id.clone(), device);
     }
     Ok(())
 }
@@ -71,6 +83,7 @@ impl btleplug::api::Central for Adapter {
             services: Vec<Uuid>,
             on_device: Channel<serde_json::Value>,
         }
+        DEVICES.write().await.clear();
         let on_device = Channel::new(on_device_callback);
         get_handle()
             .run_mobile_plugin(
@@ -99,20 +112,13 @@ impl btleplug::api::Central for Adapter {
         DEVICES
             .read()
             .await
-            .get(&id.to_string())
+            .get(&id)
             .cloned()
             .ok_or(btleplug::Error::DeviceNotFound)
     }
 
-    async fn add_peripheral(&self, address: &PeripheralId) -> Result<Self::Peripheral> {
-        let dev = Peripheral {
-            address: address.to_string(),
-        };
-        DEVICES
-            .write()
-            .await
-            .insert(address.to_string(), dev.clone());
-        Ok(dev)
+    async fn add_peripheral(&self, _address: &PeripheralId) -> Result<Self::Peripheral> {
+        Err(btleplug::Error::NotSupported("add_peripheral".to_string()))
     }
 
     async fn adapter_info(&self) -> Result<String> {
@@ -141,23 +147,32 @@ impl btleplug::api::Manager for Manager {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Peripheral {
-    address: String,
+    id: PeripheralId,
+    address: BDAddr,
+    name: String,
+    rssi: i16,
+    connected: bool,
 }
 
 #[async_trait::async_trait]
 impl btleplug::api::Peripheral for Peripheral {
     fn id(&self) -> PeripheralId {
-        todo!()
+        self.id.clone()
     }
 
     fn address(&self) -> BDAddr {
-        todo!()
+        self.address
     }
 
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
-        todo!()
+        Ok(Some(PeripheralProperties {
+            address: self.address,
+            local_name: Some(self.name.clone()),
+            rssi: Some(self.rssi),
+            ..Default::default()
+        }))
     }
 
     fn services(&self) -> BTreeSet<Service> {
@@ -165,7 +180,7 @@ impl btleplug::api::Peripheral for Peripheral {
     }
 
     async fn is_connected(&self) -> Result<bool> {
-        todo!()
+        Ok(self.connected)
     }
 
     async fn connect(&self) -> Result<()> {
