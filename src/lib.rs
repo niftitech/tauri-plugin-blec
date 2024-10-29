@@ -7,6 +7,7 @@ use tauri::{
     plugin::{Builder, TauriPlugin},
     Manager, Runtime, Wry,
 };
+use tokio::sync::Mutex;
 
 // #[cfg(target_os = "android")]
 mod android;
@@ -15,11 +16,12 @@ mod error;
 mod handler;
 mod models;
 
-static HANDLER: OnceCell<BleHandler> = OnceCell::new();
+static HANDLER: OnceCell<Mutex<BleHandler>> = OnceCell::new();
+
 /// Initializes the plugin.
 pub fn init() -> TauriPlugin<Wry> {
-    let _ = HANDLER
-        .set(async_runtime::block_on(BleHandler::new()).expect("failed to initialize handler"));
+    let handler = async_runtime::block_on(BleHandler::new()).expect("failed to initialize handler");
+    let _ = HANDLER.set(Mutex::new(handler));
 
     let builder = Builder::new("blec").invoke_handler(commands::commands());
     #[cfg(target_os = "android")]
@@ -30,7 +32,7 @@ pub fn init() -> TauriPlugin<Wry> {
     builder.build()
 }
 
-pub fn get_handler() -> error::Result<&'static BleHandler> {
+pub fn get_handler() -> error::Result<&'static Mutex<BleHandler>> {
     let handler = HANDLER.get().ok_or(error::Error::HandlerNotInitialized)?;
     Ok(handler)
 }

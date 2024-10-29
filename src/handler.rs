@@ -30,8 +30,8 @@ struct Listener {
 pub struct BleHandler {
     connected: Option<Arc<Peripheral>>,
     characs: Vec<Characteristic>,
-    devices: Mutex<HashMap<String, Peripheral>>,
-    adapter: Adapter,
+    devices: Arc<Mutex<HashMap<String, Peripheral>>>,
+    adapter: Arc<Adapter>,
     listen_handle: Option<async_runtime::JoinHandle<()>>,
     notify_listeners: Arc<Mutex<Vec<Listener>>>,
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
@@ -48,10 +48,10 @@ impl BleHandler {
     pub async fn new() -> Result<Self, Error> {
         let central = get_central().await?;
         Ok(Self {
-            devices: Mutex::new(HashMap::new()),
+            devices: Arc::new(Mutex::new(HashMap::new())),
             characs: vec![],
             connected: None,
-            adapter: central,
+            adapter: Arc::new(central),
             listen_handle: None,
             notify_listeners: Arc::new(Mutex::new(vec![])),
             on_disconnect: None,
@@ -147,30 +147,38 @@ impl BleHandler {
         &self,
         tx: Option<mpsc::Sender<Vec<BleDevice>>>,
         timeout: u64,
-    ) -> Result<Vec<BleDevice>, Error> {
+    ) -> Result<(), Error> {
         self.adapter
             .start_scan(ScanFilter {
                 // services: vec![*SERVICE_UUID],
                 services: vec![],
             })
             .await?;
-        self.devices.lock().await.clear();
-        let loops = (timeout as f64 / 200.0).round() as u64;
-        let mut devices = vec![];
-        for _ in 0..loops {
-            sleep(Duration::from_millis(200)).await;
-            let discovered = self.adapter.peripherals().await?;
-            devices = self.add_devices(discovered).await;
-            if !devices.is_empty() {
-                if let Some(tx) = &tx {
-                    tx.send(devices.clone())
-                        .await
-                        .map_err(|e| Error::SendingDevices(e))?;
+        let mut self_devices = self.devices.clone();
+        let adapter = self.adapter.clone();
+        tokio::task::spawn(async move {
+            self_devices.lock().await.clear();
+            let loops = (timeout as f64 / 200.0).round() as u64;
+            let mut devices;
+            for _ in 0..loops {
+                sleep(Duration::from_millis(200)).await;
+                let discovered = adapter
+                    .peripherals()
+                    .await
+                    .expect("failed to get peripherals");
+                devices = Self::add_devices(&mut self_devices, discovered).await;
+                if !devices.is_empty() {
+                    if let Some(tx) = &tx {
+                        tx.send(devices.clone())
+                            .await
+                            .map_err(|e| Error::SendingDevices(e))
+                            .expect("failed to send devices");
+                    }
                 }
             }
-        }
-        self.adapter.stop_scan().await?;
-        Ok(devices)
+            adapter.stop_scan().await.expect("failed to stop scan");
+        });
+        Ok(())
     }
 
     /// Stops scanning for devices
@@ -179,11 +187,14 @@ impl BleHandler {
         Ok(())
     }
 
-    async fn add_devices(&self, discovered: Vec<Peripheral>) -> Vec<BleDevice> {
+    async fn add_devices(
+        self_devices: &mut Arc<Mutex<HashMap<String, Peripheral>>>,
+        discovered: Vec<Peripheral>,
+    ) -> Vec<BleDevice> {
         let mut devices = vec![];
         for p in discovered {
             if let Ok(dev) = BleDevice::from_peripheral(&p).await {
-                self.devices.lock().await.insert(dev.address.clone(), p);
+                self_devices.lock().await.insert(dev.address.clone(), p);
                 devices.push(dev);
             }
         }

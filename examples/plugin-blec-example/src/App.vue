@@ -34,8 +34,11 @@ async function stopScan() {
   await invoke('plugin:blec|stop_scan')
 }
 
-function connect(device: BleDevice) {
+async function connect(device: BleDevice) {
   console.log('connect', device)
+  await invoke('plugin:blec|connect', {
+    address: device.address,
+  })
 }
 </script>
 
