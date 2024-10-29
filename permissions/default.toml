@@ -1,3 +1,3 @@
 [default]
 description = "Default permissions for the plugin"
-permissions = ["allow-scan","allow-stop-scan"]
+permissions = ["allow-scan","allow-stop-scan","allow-connect","allow-disconnect"]

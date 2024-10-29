@@ -295,6 +295,26 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the connect command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-connect"
+        },
+        {
+          "description": "Denies the connect command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-connect"
+        },
+        {
+          "description": "Enables the disconnect command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-disconnect"
+        },
+        {
+          "description": "Denies the disconnect command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-disconnect"
+        },
+        {
           "description": "Enables the ping command without any pre-configured scope.",
           "type": "string",
           "const": "allow-ping"

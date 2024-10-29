@@ -34,19 +34,40 @@ async function stopScan() {
   await invoke('plugin:blec|stop_scan')
 }
 
+async function disconnect() {
+  console.log('disconnect')
+  await invoke('plugin:blec|disconnect')
+}
+
+const SERVICE_UUID = 'A07498CA-AD5B-474E-940D-16F1FBE7E8CD'
+const CHARACTERISTIC_UUID = '51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B'
 async function connect(device: BleDevice) {
-  console.log('connect', device)
-  await invoke('plugin:blec|connect', {
-    address: device.address,
-  })
+  console.log('connect', device.address)
+  let onDisconnect = new Channel()
+  onDisconnect.onmessage = () => {
+    console.log('device ${device.address} disconnected')
+  }
+  try {
+    await invoke('plugin:blec|connect', {
+      address: device.address,
+      service: SERVICE_UUID,
+      characs: [CHARACTERISTIC_UUID],
+      onDisconnect
+    })
+  } catch (e) {
+    console.error(e)
+  } finally {
+    await disconnect()
+  }
 }
 </script>
 
 <template>
   <div class="container">
     <h1>Welcome to the blec plugin!</h1>
-    <button :onclick="startScan">Start Scan</button>
-    <button :onclick="stopScan">Stop Scan</button>
+    <button :onclick="startScan" style="margin-bottom: 5px;">Start Scan</button>
+    <button :onclick="stopScan" style="margin-bottom: 5px;">Stop Scan</button>
+    <button :onclick="disconnect" style="margin-bottom: 5px;">Disconnect</button>
     <div v-for="device in devices" class="row">
       <BleDev :key="device.address" :device="device" :onclick="() => connect(device)" />
     </div>

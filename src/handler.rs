@@ -70,12 +70,12 @@ impl BleHandler {
         }
         // connect to the given address
         self.connect_device(address).await?;
-        // discover service/characteristics
-        self.connect_service(service, &characs).await?;
         // set callback to run on disconnect
         if let Some(cb) = on_disconnect {
             self.on_disconnect = Some(Mutex::new(Box::new(cb)));
         }
+        // discover service/characteristics
+        self.connect_service(service, &characs).await?;
         // start background task for notifications
         self.listen_handle = Some(async_runtime::spawn(listen_notify(
             self.get_device().await?,

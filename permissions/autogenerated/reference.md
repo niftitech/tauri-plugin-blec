@@ -4,6 +4,8 @@ Default permissions for the plugin
 
 - `allow-scan`
 - `allow-stop-scan`
+- `allow-connect`
+- `allow-disconnect`
 
 ## Permission Table
 
@@ -13,6 +15,58 @@ Default permissions for the plugin
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`blec:allow-connect`
+
+</td>
+<td>
+
+Enables the connect command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-connect`
+
+</td>
+<td>
+
+Denies the connect command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-disconnect`
+
+</td>
+<td>
+
+Enables the disconnect command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-disconnect`
+
+</td>
+<td>
+
+Denies the disconnect command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

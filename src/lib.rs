@@ -9,7 +9,7 @@ use tauri::{
 };
 use tokio::sync::Mutex;
 
-// #[cfg(target_os = "android")]
+#[cfg(target_os = "android")]
 mod android;
 mod commands;
 mod error;
