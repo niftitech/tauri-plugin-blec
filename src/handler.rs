@@ -12,7 +12,7 @@ use std::time::Duration;
 use tauri::async_runtime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::sleep;
-use tracing::debug;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]
@@ -137,7 +137,6 @@ impl BleHandler {
             callback();
         }
         self.characs.clear();
-        self.devices.lock().await.clear();
         Ok(())
     }
 
@@ -193,9 +192,14 @@ impl BleHandler {
     ) -> Vec<BleDevice> {
         let mut devices = vec![];
         for p in discovered {
-            if let Ok(dev) = BleDevice::from_peripheral(&p).await {
-                self_devices.lock().await.insert(dev.address.clone(), p);
-                devices.push(dev);
+            match BleDevice::from_peripheral(&p).await {
+                Ok(dev) => {
+                    self_devices.lock().await.insert(dev.address.clone(), p);
+                    devices.push(dev);
+                }
+                Err(e) => {
+                    error!("Failed to add device: {e}");
+                }
             }
         }
         devices.sort();

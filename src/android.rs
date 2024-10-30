@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use btleplug::{
     api::{
-        BDAddr, CentralEvent, CentralState, Characteristic, Descriptor, PeripheralProperties,
-        Service, ValueNotification, WriteType,
+        BDAddr, CentralEvent, CentralState, CharPropFlags, Characteristic, Descriptor,
+        PeripheralProperties, Service, ValueNotification, WriteType,
     },
     platform::PeripheralId,
 };
@@ -32,7 +32,7 @@ fn get_handle() -> &'static PluginHandle<Wry> {
 }
 
 pub fn init<C: serde::de::DeserializeOwned>(
-    app: &AppHandle<Wry>,
+    _app: &AppHandle<Wry>,
     api: tauri::plugin::PluginApi<Wry, C>,
 ) -> std::result::Result<(), crate::error::Error> {
     let handle = api.register_android_plugin("com.plugin.blec", "BleClientPlugin")?;
@@ -155,6 +155,16 @@ pub struct Peripheral {
     rssi: i16,
     connected: bool,
 }
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectParams {
+    address: BDAddr,
+}
+
+#[derive(serde::Deserialize)]
+struct BoolResult {
+    result: bool,
+}
 
 #[async_trait::async_trait]
 impl btleplug::api::Peripheral for Peripheral {
@@ -176,23 +186,107 @@ impl btleplug::api::Peripheral for Peripheral {
     }
 
     fn services(&self) -> BTreeSet<Service> {
-        todo!()
+        #[derive(serde::Deserialize)]
+        struct ResCharacteristic {
+            uuid: Uuid,
+            properties: u8,
+            descriptors: Vec<Uuid>,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ResService {
+            uuid: Uuid,
+            primary: bool,
+            characs: Vec<ResCharacteristic>,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ServicesResult {
+            result: Vec<ResService>,
+        }
+        let res: ServicesResult = get_handle()
+            .run_mobile_plugin(
+                "services",
+                ConnectParams {
+                    address: self.address,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))
+            .expect("failed to get services");
+        let mut services = BTreeSet::new();
+        for s in res.result {
+            let mut characteristics = BTreeSet::new();
+            for c in s.characs {
+                let mut descriptors = BTreeSet::new();
+                for d in c.descriptors {
+                    descriptors.insert(Descriptor {
+                        uuid: d,
+                        characteristic_uuid: c.uuid,
+                        service_uuid: s.uuid,
+                    });
+                }
+                characteristics.insert(Characteristic {
+                    uuid: c.uuid,
+                    service_uuid: s.uuid,
+                    properties: CharPropFlags::from_bits_truncate(c.properties),
+                    descriptors,
+                });
+            }
+            services.insert(Service {
+                uuid: s.uuid,
+                primary: s.primary,
+                characteristics,
+            });
+        }
+        services
     }
 
     async fn is_connected(&self) -> Result<bool> {
-        Ok(self.connected)
+        let res: BoolResult = get_handle()
+            .run_mobile_plugin(
+                "is_connected",
+                ConnectParams {
+                    address: self.address,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(res.result)
     }
 
     async fn connect(&self) -> Result<()> {
-        todo!()
+        get_handle()
+            .run_mobile_plugin(
+                "connect",
+                ConnectParams {
+                    address: self.address,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(())
     }
 
     async fn disconnect(&self) -> Result<()> {
-        todo!()
+        get_handle()
+            .run_mobile_plugin(
+                "disconnect",
+                ConnectParams {
+                    address: self.address,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(())
     }
 
     async fn discover_services(&self) -> Result<()> {
-        todo!()
+        get_handle()
+            .run_mobile_plugin(
+                "discover_services",
+                ConnectParams {
+                    address: self.address,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(())
     }
 
     async fn write(

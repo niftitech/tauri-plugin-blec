@@ -1,5 +1,6 @@
 package com.plugin.blec
 
+import Peripheral
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -8,6 +9,7 @@ import app.tauri.plugin.Invoke
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
@@ -47,17 +49,10 @@ class BleDevice(
     }
 }
 
-@InvokeArg
-class ScanParams {
-    val services: ArrayList<String> = ArrayList()
-    val onDevice: Channel? = null
-}
-
-class BleClient(private val activity: Activity) {
+class BleClient(private val activity: Activity, private val plugin: BleClientPlugin) {
     private var scanner: BluetoothLeScanner? = null;
     private var manager: BluetoothManager? = null;
     private var scanCb: ScanCallback? = null;
-    private var devices: MutableMap<String,BluetoothDevice> = mutableMapOf();
 
     private fun markFirstPermissionRequest(perm: String) {
         val sharedPreference: SharedPreferences =
@@ -107,6 +102,11 @@ class BleClient(private val activity: Activity) {
         return true
     }
 
+    @InvokeArg
+    class ScanParams {
+        val services: ArrayList<String> = ArrayList()
+        val onDevice: Channel? = null
+    }
     @SuppressLint("MissingPermission")
     fun startScan(invoke: Invoke) {
         // check if running
@@ -136,7 +136,7 @@ class BleClient(private val activity: Activity) {
         }
 
         // clear old devices
-        this.devices.clear()
+        this.plugin.devices.clear()
 
         val args = invoke.parseArgs(ScanParams::class.java)
         var filters: ArrayList<ScanFilter?>? = null
@@ -168,7 +168,7 @@ class BleClient(private val activity: Activity) {
                     // TODO: check if connected
                     false
                 )
-                this@BleClient.devices[device.address] = result.device
+                this@BleClient.plugin.devices[device.address] = Peripheral(this@BleClient.activity, result.device)
                 val res = JSObject()
                 res.put("result", device.toJsObject())
                 args.onDevice!!.send(res)
