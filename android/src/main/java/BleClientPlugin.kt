@@ -3,7 +3,6 @@ package com.plugin.blec
 
 import Peripheral
 import android.app.Activity
-import android.bluetooth.BluetoothDevice
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -19,7 +18,7 @@ class ConnectParams{
 
 @TauriPlugin
 class BleClientPlugin(private val activity: Activity): Plugin(activity) {
-    public var devices: MutableMap<String, Peripheral> = mutableMapOf();
+    var devices: MutableMap<String, Peripheral> = mutableMapOf();
     private val client = BleClient(activity,this)
 
     @Command

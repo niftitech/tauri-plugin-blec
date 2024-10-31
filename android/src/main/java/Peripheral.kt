@@ -81,22 +81,58 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     }
 
      class ResCharacteristic (
-        uuid: String,
-        properties: Int,
-        descriptors: List<String>,
-     )
+         private val uuid: String,
+         private val properties: Int,
+         private val descriptors: List<String>
+     ){
+         fun toJson():JSObject{
+             val ret = JSObject()
+             ret.put("uuid",uuid)
+             ret.put("properties",properties)
+             val descriptors = JSONArray()
+             for (desc in this.descriptors){
+                 descriptors.put(desc)
+             }
+             ret.put("descriptors",descriptors)
+            return ret
+         }
+     }
 
     class ResService (
-        uuid: String,
-        primary: Boolean,
-        characs: List<ResCharacteristic>,
-    )
+        private val uuid: String,
+        private val primary: Boolean,
+        private val characs: List<ResCharacteristic>,
+    ){
+        fun toJson():JSObject{
+            val ret = JSObject()
+            ret.put("uuid",uuid)
+            ret.put("primary",primary)
+            val characs = JSONArray()
+            for (char in this.characs){
+                characs.put(char.toJson())
+            }
+            ret.put("characs",characs)
+            return ret
+        }
+    }
 
     fun services(invoke:Invoke){
         //TODO: return discovered services
         var services = JSONArray()
         for(service in this.services){
-
+            var characs:MutableList<ResCharacteristic> = mutableListOf()
+            for (charac in service.characteristics){
+                characs.add(ResCharacteristic(
+                    charac.uuid.toString(),
+                    0,
+                    charac.descriptors.map { desc ->  desc.uuid.toString()},
+                ))
+            }
+            services.put(ResService(
+                service.uuid.toString(),
+                service.type == BluetoothGattService.SERVICE_TYPE_PRIMARY,
+                characs
+            ).toJson())
         }
         var res = JSObject()
         res.put("result",services)

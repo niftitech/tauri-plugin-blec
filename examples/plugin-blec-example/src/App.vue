@@ -45,7 +45,7 @@ async function connect(device: BleDevice) {
   console.log('connect', device.address)
   let onDisconnect = new Channel()
   onDisconnect.onmessage = () => {
-    console.log('device ${device.address} disconnected')
+    console.log(`device ${device.address} disconnected`)
   }
   try {
     await invoke('plugin:blec|connect', {

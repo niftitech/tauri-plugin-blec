@@ -21,6 +21,7 @@ use tauri::{
     AppHandle, Manager as _, Wry,
 };
 use tokio::sync::RwLock;
+use tracing::info;
 use uuid::Uuid;
 
 type Result<T> = std::result::Result<T, btleplug::Error>;
@@ -55,7 +56,7 @@ fn on_device_callback(response: InvokeResponseBody) -> std::result::Result<(), t
         Ok(PeripheralResult { result }) => result,
         Err(e) => {
             tracing::error!("failed to deserialize peripheral: {:?}", e);
-            return Ok(());
+            return Err(tauri::Error::from(e));
         }
     };
     let mut devices = DEVICES.blocking_write();
@@ -153,7 +154,6 @@ pub struct Peripheral {
     address: BDAddr,
     name: String,
     rssi: i16,
-    connected: bool,
 }
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -238,6 +238,7 @@ impl btleplug::api::Peripheral for Peripheral {
                 characteristics,
             });
         }
+        info!("services: {services:?}");
         services
     }
 
