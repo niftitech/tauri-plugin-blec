@@ -6,9 +6,11 @@ import android.app.Activity
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
+import app.tauri.plugin.Channel
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import java.util.UUID
 
 
 @InvokeArg
@@ -86,5 +88,15 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
             return
         }
         device.services(invoke)
+    }
+
+    class NotifyParams (
+        val address: String,
+        val channel: Channel,
+    )
+
+    @Command
+    fun subscribe(invoke:Invoke){
+
     }
 }

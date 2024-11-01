@@ -21,6 +21,7 @@ use tauri::{
     AppHandle, Manager as _, Wry,
 };
 use tokio::sync::RwLock;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::info;
 use uuid::Uuid;
 
@@ -312,7 +313,45 @@ impl btleplug::api::Peripheral for Peripheral {
     }
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {
-        todo!()
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Notification {
+            uuid: Uuid,
+            data: Vec<u8>,
+        }
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct NotifyParams {
+            address: BDAddr,
+            channel: Channel<Notification>,
+        }
+        let (tx, rx) = tokio::sync::mpsc::channel::<ValueNotification>(1);
+        let stream = ReceiverStream::new(rx);
+        let channel: Channel<Notification> = Channel::new(move |response| {
+            match response.deserialize::<Notification>() {
+                Ok(notification) => tx
+                    .blocking_send(ValueNotification {
+                        uuid: notification.uuid,
+                        value: notification.data,
+                    })
+                    .expect("failed to send notification"),
+                Err(e) => {
+                    tracing::error!("failed to deserialize notification: {:?}", e);
+                    return Err(tauri::Error::from(e));
+                }
+            };
+            Ok(())
+        });
+        get_handle()
+            .run_mobile_plugin(
+                "subscribe",
+                NotifyParams {
+                    address: self.address,
+                    channel,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(Box::pin(stream))
     }
 
     async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {

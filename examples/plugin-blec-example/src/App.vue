@@ -56,7 +56,6 @@ async function connect(device: BleDevice) {
     })
   } catch (e) {
     console.error(e)
-  } finally {
     await disconnect()
   }
 }

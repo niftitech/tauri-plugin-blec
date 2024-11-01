@@ -12,7 +12,7 @@ use std::time::Duration;
 use tauri::async_runtime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::sleep;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]

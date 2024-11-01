@@ -3,10 +3,13 @@ import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattService
+import app.tauri.plugin.Channel
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import org.json.JSONArray
+import java.util.UUID
 
 
 class Peripheral(private val activity: Activity, private val device: BluetoothDevice) {
@@ -15,6 +18,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     private var services: List<BluetoothGattService> = listOf()
     private var onConnectionStateChange: ((connected:Boolean,error:String)->Unit)? = null
     private var onServicesDiscovered: ((connected:Boolean,error:String)->Unit)? = null
+    private var notifyChannel:Channel? = null
     private val callback = object:BluetoothGattCallback(){
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
             if(status == BluetoothGatt.GATT_SUCCESS && newState==BluetoothGatt.STATE_CONNECTED && gatt!=null){
@@ -35,6 +39,19 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
                 this@Peripheral.services = gatt.services
                 this@Peripheral.onServicesDiscovered?.invoke(true,"")
             }
+        }
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray
+        ) {
+            if (this@Peripheral.notifyChannel == null){
+                return
+            }
+            val notification = JSObject();
+            notification.put("uuid",characteristic.uuid)
+            notification.put("data",value)
+            this@Peripheral.notifyChannel!!.send(notification)
         }
     }
 
@@ -137,5 +154,13 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
         var res = JSObject()
         res.put("result",services)
         invoke.resolve(res)
+    }
+
+    class Notification(
+        uuid: UUID,
+        data: Array<Byte>
+    )
+    fun setNotifyChannel(channel: Channel){
+        this.notifyChannel = channel;
     }
 }
