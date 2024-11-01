@@ -90,13 +90,37 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
         device.services(invoke)
     }
 
-    class NotifyParams (
-        val address: String,
-        val channel: Channel,
-    )
+    class NotifyParams () {
+        var address: String = ""
+        var channel: Channel? = null
+    }
 
     @Command
     fun subscribe(invoke:Invoke){
+        val args = invoke.parseArgs(NotifyParams::class.java)
+        val device = this.devices[args.address]
+        if (device == null){
+            invoke.reject("Device not found")
+            return
+        }
+        device.setNotifyChannel(args.channel!!)
+        invoke.resolve()
+    }
 
+    class SendParams() {
+        val address: String = ""
+        val characteristic: UUID? = null
+        val data: ByteArray? = null
+        val withResponse: Boolean = true
+    }
+    @Command
+    fun write(invoke:Invoke){
+        val args = invoke.parseArgs(SendParams::class.java)
+        val device = this.devices[args.address]
+        if (device == null){
+            invoke.reject("Device not found")
+            return
+        }
+        device.write(invoke)
     }
 }

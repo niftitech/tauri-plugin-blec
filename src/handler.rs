@@ -35,6 +35,7 @@ pub struct BleHandler {
     listen_handle: Option<async_runtime::JoinHandle<()>>,
     notify_listeners: Arc<Mutex<Vec<Listener>>>,
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
+    connection_update_channel: Option<mpsc::Sender<bool>>,
 }
 
 async fn get_central() -> Result<Adapter, Error> {
@@ -55,7 +56,16 @@ impl BleHandler {
             listen_handle: None,
             notify_listeners: Arc::new(Mutex::new(vec![])),
             on_disconnect: None,
+            connection_update_channel: None,
         })
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.connected.is_some()
+    }
+
+    pub fn set_connection_update_channel(&mut self, tx: mpsc::Sender<bool>) {
+        self.connection_update_channel = Some(tx);
     }
 
     pub async fn connect(
@@ -117,6 +127,11 @@ impl BleHandler {
             debug!("Connecting done");
         }
         self.connected = Some(Arc::new(device.clone()));
+        if let Some(tx) = &self.connection_update_channel {
+            tx.send(true)
+                .await
+                .expect("failed to send connection update");
+        }
         Ok(())
     }
 
@@ -135,6 +150,11 @@ impl BleHandler {
         if let Some(on_disconnect) = &self.on_disconnect {
             let callback = on_disconnect.lock().await;
             callback();
+        }
+        if let Some(tx) = &self.connection_update_channel {
+            tx.send(false)
+                .await
+                .expect("failed to send connection update");
         }
         self.characs.clear();
         Ok(())

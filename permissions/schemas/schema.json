@@ -305,6 +305,16 @@
           "const": "deny-connect"
         },
         {
+          "description": "Enables the connection_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-connection-state"
+        },
+        {
+          "description": "Denies the connection_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-connection-state"
+        },
+        {
           "description": "Enables the disconnect command without any pre-configured scope.",
           "type": "string",
           "const": "allow-disconnect"
@@ -333,6 +343,16 @@
           "description": "Denies the scan command without any pre-configured scope.",
           "type": "string",
           "const": "deny-scan"
+        },
+        {
+          "description": "Enables the send command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-send"
+        },
+        {
+          "description": "Denies the send command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-send"
         },
         {
           "description": "Enables the stop_scan command without any pre-configured scope.",

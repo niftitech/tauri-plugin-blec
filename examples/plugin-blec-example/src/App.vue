@@ -1,30 +1,38 @@
 <script setup lang="ts">
 // This starter template is using Vue 3 <script setup> SFCs
 // Check out https://vuejs.org/api/sfc-script-setup.html#script-setup
-import { scan, BleDevice } from 'tauri-plugin-blec'
-import { ref } from 'vue';
+import { BleDevice } from 'tauri-plugin-blec'
+import { onMounted, ref } from 'vue';
 import BleDev from './components/BleDev.vue'
 import { Channel, invoke } from '@tauri-apps/api/core';
 
 const devices = ref<BleDevice[]>([])
+const connected = ref(false)
+
+async function get_connection_updates() {
+  let connection_chan = new Channel<boolean>()
+  connection_chan.onmessage = (state: boolean) => {
+    console.log('connection state', connected)
+    connected.value = state
+  }
+  await invoke('plugin:blec|connection_state', { update: connection_chan })
+}
+onMounted(async () => {
+  await get_connection_updates()
+})
+
 interface Devices {
   devices: BleDevice[]
 }
 async function startScan() {
   console.log('start scan')
-  // scan(1000, (dev) => {
-  //   console.log(devices)
-  //   devices.value = dev
-  // }).then((result) => {
-  //   console.log(result)
-  // })
   let onDevices = new Channel<Devices>()
   onDevices.onmessage = (d: Devices) => {
-    console.log('onDevices', d)
+    console.log('onDevices', d.devices.map(d => d.name))
     devices.value = d.devices
   }
   console.log(await invoke<Devices>('plugin:blec|scan', {
-    timeout: 1000,
+    timeout: 5000,
     onDevices
   }))
 }
@@ -54,10 +62,20 @@ async function connect(device: BleDevice) {
       characs: [CHARACTERISTIC_UUID],
       onDisconnect
     })
+    devices.value = []
   } catch (e) {
     console.error(e)
     await disconnect()
   }
+}
+
+const sendData = ref('')
+
+async function send() {
+  await invoke('plugin:blec|send', {
+    characteristic: CHARACTERISTIC_UUID,
+    data: new TextEncoder().encode(sendData.value)
+  })
 }
 </script>
 
@@ -67,7 +85,12 @@ async function connect(device: BleDevice) {
     <button :onclick="startScan" style="margin-bottom: 5px;">Start Scan</button>
     <button :onclick="stopScan" style="margin-bottom: 5px;">Stop Scan</button>
     <button :onclick="disconnect" style="margin-bottom: 5px;">Disconnect</button>
-    <div v-for="device in devices" class="row">
+    <div v-if="connected">
+      <p>Connected</p>
+      <input v-model="sendData" placeholder="Send data" />
+      <button class="ml" :onclick="send">Send</button>
+    </div>
+    <div v-else v-for="device in devices" class="row">
       <BleDev :key="device.address" :device="device" :onclick="() => connect(device)" />
     </div>
   </div>
@@ -121,6 +144,10 @@ async function connect(device: BleDevice) {
 .row {
   display: flex;
   justify-content: center;
+}
+
+.ml {
+  margin-left: 5px;
 }
 
 a {

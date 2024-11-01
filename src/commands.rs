@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{async_runtime, command, AppHandle, Runtime};
+use tracing::info;
 use uuid::Uuid;
 
 use crate::error::{self, Result};
@@ -68,6 +69,43 @@ pub(crate) async fn disconnect<R: Runtime>(_app: AppHandle<R>) -> Result<()> {
     Ok(())
 }
 
+#[command]
+pub(crate) async fn connection_state<R: Runtime>(
+    _app: AppHandle<R>,
+    update: Channel<bool>,
+) -> Result<()> {
+    let handler = get_handler()?;
+    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    handler.lock().await.set_connection_update_channel(tx);
+    update
+        .send(handler.lock().await.is_connected())
+        .expect("failed to send connection state");
+    async_runtime::spawn(async move {
+        while let Some(connected) = rx.recv().await {
+            update
+                .send(connected)
+                .expect("failed to send connection state to the front-end");
+        }
+    });
+    Ok(())
+}
+
+#[command]
+pub(crate) async fn send<R: Runtime>(
+    _app: AppHandle<R>,
+    characteristic: Uuid,
+    data: Vec<u8>,
+) -> Result<()> {
+    info!("Sending data: {data:?}");
+    let handler = get_handler()?;
+    handler
+        .lock()
+        .await
+        .send_data(characteristic, &data)
+        .await?;
+    Ok(())
+}
+
 pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
-    tauri::generate_handler![scan, stop_scan, connect, disconnect]
+    tauri::generate_handler![scan, stop_scan, connect, disconnect, connection_state, send]
 }

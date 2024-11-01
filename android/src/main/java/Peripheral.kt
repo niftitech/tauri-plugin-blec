@@ -5,9 +5,11 @@ import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattService
+import android.os.Build
 import app.tauri.plugin.Channel
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
+import com.plugin.blec.BleClientPlugin
 import org.json.JSONArray
 import java.util.UUID
 
@@ -16,9 +18,12 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     private var connected = false
     private var gatt: BluetoothGatt? = null
     private var services: List<BluetoothGattService> = listOf()
+    private val characteristics: MutableMap<UUID,BluetoothGattCharacteristic> = mutableMapOf()
     private var onConnectionStateChange: ((connected:Boolean,error:String)->Unit)? = null
     private var onServicesDiscovered: ((connected:Boolean,error:String)->Unit)? = null
     private var notifyChannel:Channel? = null
+    private val onReadInvoke:MutableMap<UUID,Invoke> = mutableMapOf()
+    private val onWriteInvoke:MutableMap<UUID,Invoke> = mutableMapOf()
     private val callback = object:BluetoothGattCallback(){
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
             if(status == BluetoothGatt.GATT_SUCCESS && newState==BluetoothGatt.STATE_CONNECTED && gatt!=null){
@@ -37,6 +42,11 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
                 this@Peripheral.onServicesDiscovered?.invoke(false,"No services discovered. Status $status")
             } else {
                 this@Peripheral.services = gatt.services
+                for (s in gatt.services){
+                    for (c in s.characteristics){
+                        this@Peripheral.characteristics[c.uuid] = c
+                    }
+                }
                 this@Peripheral.onServicesDiscovered?.invoke(true,"")
             }
         }
@@ -52,6 +62,21 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             notification.put("uuid",characteristic.uuid)
             notification.put("data",value)
             this@Peripheral.notifyChannel!!.send(notification)
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            val id = characteristic?.uuid ?: return
+            val invoke = this@Peripheral.onWriteInvoke[id]!!
+            if (status != BluetoothGatt.GATT_SUCCESS){
+                invoke.reject("Write to characterisitc $id failed with status $status")
+            } else {
+                invoke.resolve()
+            }
+            this@Peripheral.onWriteInvoke.remove(id)
         }
     }
 
@@ -134,10 +159,9 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     }
 
     fun services(invoke:Invoke){
-        //TODO: return discovered services
-        var services = JSONArray()
+        val services = JSONArray()
         for(service in this.services){
-            var characs:MutableList<ResCharacteristic> = mutableListOf()
+            val characs:MutableList<ResCharacteristic> = mutableListOf()
             for (charac in service.characteristics){
                 characs.add(ResCharacteristic(
                     charac.uuid.toString(),
@@ -163,4 +187,42 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     fun setNotifyChannel(channel: Channel){
         this.notifyChannel = channel;
     }
+
+    @SuppressLint("MissingPermission")
+    fun write(invoke: Invoke){
+        val args = invoke.parseArgs(BleClientPlugin.SendParams::class.java)
+        if (this.gatt == null){
+            invoke.reject("No gatt server connected")
+            return
+        }
+        val charac = this.characteristics[args.characteristic!!]
+        if (charac == null){
+            invoke.reject("Characterisitc ${args.characteristic} not found")
+            return
+        }
+        if (this.onWriteInvoke[args.characteristic!!] !=  null){
+            this.onWriteInvoke[args.characteristic!!]!!.reject("write was overwritten before finishing")
+        }
+        this.onWriteInvoke[args.characteristic!!] = invoke
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            this.gatt!!.writeCharacteristic(charac,args.data!!,if (args.withResponse){BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT}else{BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE})
+        } else {
+            @Suppress("DEPRECATION")
+            charac.value = args.data
+            @Suppress("DEPRECATION")
+            this.gatt!!.writeCharacteristic(charac)
+        }
+    }
+
+    /* @SuppressLint("MissingPermission")
+    fun read(){
+        synchronized(this.onReadInvoke) {
+            if (this.onReadInvoke[args.characteristic] == null) {
+                this.onReadInvoke[args.characteristic] = mutableListOf()
+            }
+            this.onReadInvoke[args.characteristic]!!.add(invoke)
+        }
+        this.gatt!!.readCharacteristic(charac)
+    }
+     */
 }

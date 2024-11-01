@@ -297,7 +297,18 @@ impl btleplug::api::Peripheral for Peripheral {
         data: &[u8],
         write_type: WriteType,
     ) -> Result<()> {
-        todo!()
+        get_handle()
+            .run_mobile_plugin(
+                "write",
+                serde_json::json!({
+                    "address": self.address,
+                    "characteristic": characteristic.uuid,
+                    "data": data,
+                    "withResponse": matches!(write_type, WriteType::WithResponse),
+                }),
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(())
     }
 
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {

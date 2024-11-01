@@ -6,6 +6,8 @@ Default permissions for the plugin
 - `allow-stop-scan`
 - `allow-connect`
 - `allow-disconnect`
+- `allow-connection-state`
+- `allow-send`
 
 ## Permission Table
 
@@ -38,6 +40,32 @@ Enables the connect command without any pre-configured scope.
 <td>
 
 Denies the connect command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-connection-state`
+
+</td>
+<td>
+
+Enables the connection_state command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-connection-state`
+
+</td>
+<td>
+
+Denies the connection_state command without any pre-configured scope.
 
 </td>
 </tr>
@@ -116,6 +144,32 @@ Enables the scan command without any pre-configured scope.
 <td>
 
 Denies the scan command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-send`
+
+</td>
+<td>
+
+Enables the send command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-send`
+
+</td>
+<td>
+
+Denies the send command without any pre-configured scope.
 
 </td>
 </tr>
