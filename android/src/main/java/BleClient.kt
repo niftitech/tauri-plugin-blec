@@ -153,11 +153,14 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
 
         scanCb = object: ScanCallback(){
             private fun sendResult(result: ScanResult){
-                val name = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                var name = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     result.device.alias
                 } else {
                     result.device.name
                 };
+                if (name==null){
+                    name = result.scanRecord?.deviceName
+                }
                 if (name == null) {
                     // TODO: think about other filtering instead
                     return;
@@ -187,7 +190,6 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
             }
         }
         scanner?.startScan(filters, settings, scanCb!!)
-
         invoke.resolve()
     }
 

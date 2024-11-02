@@ -26,6 +26,7 @@ interface Devices {
 }
 async function startScan() {
   console.log('start scan')
+  devices.value = []
   let onDevices = new Channel<Devices>()
   onDevices.onmessage = (d: Devices) => {
     console.log('onDevices', d.devices.map(d => d.name))

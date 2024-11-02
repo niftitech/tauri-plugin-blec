@@ -282,7 +282,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     }
 
     @SuppressLint("MissingPermission")
-    fun subscribe(invoke: Invoke){
+    fun subscribe(invoke: Invoke,enabled: Boolean){
         val args = invoke.parseArgs(BleClientPlugin.ReadParams::class.java)
         if (this.gatt == null){
             invoke.reject("No gatt server connected")
@@ -293,18 +293,18 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             invoke.reject("Characteristic ${args.characteristic} not found")
             return
         }
-        println("Subscribing to characteristic")
 
-        if (!this.gatt!!.setCharacteristicNotification(charac,true)){
+        if (!this.gatt!!.setCharacteristicNotification(charac,enabled)){
             invoke.reject("Failed to set notification status")
         }
         this.onDescriptorInvoke = invoke
         val descriptor: BluetoothGattDescriptor = charac.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR)
+        val data = if (enabled){BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE}else{BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE}
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            this.gatt!!.writeDescriptor(descriptor,BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            this.gatt!!.writeDescriptor(descriptor,data)
         } else {
             @Suppress("DEPRECATION")
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            descriptor.value = data
             @Suppress("DEPRECATION")
             this.gatt!!.writeDescriptor(descriptor)
         }

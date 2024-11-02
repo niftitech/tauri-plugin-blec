@@ -10,8 +10,8 @@ links = "tauri-plugin-blec"
 
 [workspace]
 members = [
+    "./",
     "examples/plugin-blec-example/src-tauri",
-    "examples/test-server"
 ]
 
 [dependencies]

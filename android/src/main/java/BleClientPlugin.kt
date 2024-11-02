@@ -147,6 +147,17 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
             invoke.reject("Device not found")
             return
         }
-        device.subscribe(invoke)
+        device.subscribe(invoke,true)
+    }
+
+    @Command
+    fun unsubscribe(invoke: Invoke){
+        val args = invoke.parseArgs(ReadParams::class.java)
+        val device = this.devices[args.address]
+        if (device == null){
+            invoke.reject("Device not found")
+            return
+        }
+        device.subscribe(invoke,false)
     }
 }

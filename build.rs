@@ -10,6 +10,7 @@ const COMMANDS: &[&str] = &[
     "recv_string",
     "subscribe",
     "subscribe_string",
+    "unsubscribe",
 ];
 
 fn main() {

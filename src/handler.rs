@@ -261,6 +261,15 @@ impl BleHandler {
         Ok(())
     }
 
+    pub async fn unsubscribe(&mut self, c: Uuid) -> Result<(), Error> {
+        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+        let charac = self.get_charac(c)?;
+        dev.unsubscribe(charac).await?;
+        let mut listeners = self.notify_listeners.lock().await;
+        listeners.retain(|l| l.uuid != charac.uuid);
+        Ok(())
+    }
+
     pub(super) async fn get_event_stream(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>, Error> {

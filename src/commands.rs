@@ -183,6 +183,16 @@ pub(crate) async fn subscribe_string<R: Runtime>(
     Ok(())
 }
 
+#[command]
+pub(crate) async fn unsubscribe<R: Runtime>(
+    _app: AppHandle<R>,
+    characteristic: Uuid,
+) -> Result<()> {
+    let handler = get_handler()?;
+    handler.lock().await.unsubscribe(characteristic).await?;
+    Ok(())
+}
+
 pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
     tauri::generate_handler![
         scan,
@@ -195,6 +205,7 @@ pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
         recv,
         recv_string,
         subscribe,
-        subscribe_string
+        subscribe_string,
+        unsubscribe
     ]
 }

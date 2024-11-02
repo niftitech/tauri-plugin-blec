@@ -350,7 +350,16 @@ impl btleplug::api::Peripheral for Peripheral {
     }
 
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        todo!()
+        get_handle()
+            .run_mobile_plugin(
+                "unsubscribe",
+                ReadParams {
+                    address: self.address,
+                    characteristic: characteristic.uuid,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(())
     }
 
     async fn notifications(&self) -> Result<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>> {

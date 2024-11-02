@@ -10,7 +10,7 @@ defineProps<{
     <div class="box">
         <h1>{{ device.name }}</h1>
         <p>{{ device.address }}</p>
-        <p>Connected: {{ device.isConnected }}</p>
+        <p>{{ device.isConnected ? "Connected" : "Not Connected" }}</p>
     </div>
 </template>
 

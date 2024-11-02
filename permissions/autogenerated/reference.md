@@ -13,6 +13,7 @@ Default permissions for the plugin
 - `allow-recv-string`
 - `allow-subscribe`
 - `allow-subscribe-string`
+- `allow-unsubscribe`
 
 ## Permission Table
 
@@ -331,6 +332,32 @@ Enables the subscribe_string command without any pre-configured scope.
 <td>
 
 Denies the subscribe_string command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-unsubscribe`
+
+</td>
+<td>
+
+Enables the unsubscribe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-unsubscribe`
+
+</td>
+<td>
+
+Denies the unsubscribe command without any pre-configured scope.
 
 </td>
 </tr>

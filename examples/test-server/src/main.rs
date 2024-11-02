@@ -106,7 +106,7 @@ async fn main() -> bluer::Result<()> {
                                     break;
                                 }
                             }
-                            sleep(Duration::from_secs(5)).await;
+                            sleep(Duration::from_secs(1)).await;
                         }
                         println!("Notification session stop");
                     });
