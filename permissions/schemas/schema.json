@@ -335,6 +335,26 @@
           "const": "deny-ping"
         },
         {
+          "description": "Enables the recv command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-recv"
+        },
+        {
+          "description": "Denies the recv command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-recv"
+        },
+        {
+          "description": "Enables the recv_string command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-recv-string"
+        },
+        {
+          "description": "Denies the recv_string command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-recv-string"
+        },
+        {
           "description": "Enables the scan command without any pre-configured scope.",
           "type": "string",
           "const": "allow-scan"
@@ -353,6 +373,16 @@
           "description": "Denies the send command without any pre-configured scope.",
           "type": "string",
           "const": "deny-send"
+        },
+        {
+          "description": "Enables the send_string command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-send-string"
+        },
+        {
+          "description": "Denies the send_string command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-send-string"
         },
         {
           "description": "Enables the stop_scan command without any pre-configured scope.",

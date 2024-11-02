@@ -312,7 +312,27 @@ impl btleplug::api::Peripheral for Peripheral {
     }
 
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
-        todo!()
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ReadParams {
+            address: BDAddr,
+            characteristic: Uuid,
+        }
+        #[derive(serde::Deserialize)]
+        struct ReadResult {
+            value: Vec<u8>,
+        }
+        let res: ReadResult = get_handle()
+            .run_mobile_plugin(
+                "read",
+                ReadParams {
+                    address: self.address,
+                    characteristic: characteristic.uuid,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        info!("read: {:?}", res.value);
+        Ok(res.value)
     }
 
     async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {

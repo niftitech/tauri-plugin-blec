@@ -8,6 +8,9 @@ Default permissions for the plugin
 - `allow-disconnect`
 - `allow-connection-state`
 - `allow-send`
+- `allow-recv`
+- `allow-send-string`
+- `allow-recv-string`
 
 ## Permission Table
 
@@ -125,6 +128,58 @@ Denies the ping command without any pre-configured scope.
 <tr>
 <td>
 
+`blec:allow-recv`
+
+</td>
+<td>
+
+Enables the recv command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-recv`
+
+</td>
+<td>
+
+Denies the recv command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-recv-string`
+
+</td>
+<td>
+
+Enables the recv_string command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-recv-string`
+
+</td>
+<td>
+
+Denies the recv_string command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `blec:allow-scan`
 
 </td>
@@ -170,6 +225,32 @@ Enables the send command without any pre-configured scope.
 <td>
 
 Denies the send command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-send-string`
+
+</td>
+<td>
+
+Enables the send_string command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-send-string`
+
+</td>
+<td>
+
+Denies the send_string command without any pre-configured scope.
 
 </td>
 </tr>

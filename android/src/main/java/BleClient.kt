@@ -11,6 +11,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -161,12 +162,12 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
                     // TODO: think about other filtering instead
                     return;
                 }
+                val connected = this@BleClient.manager!!.getConnectionState(result.device,BluetoothProfile.GATT_SERVER) == BluetoothProfile.STATE_CONNECTED
                 val device = BleDevice(
                     result.device.address,
                     name,
                     result.rssi,
-                    // TODO: check if connected
-                    false
+                    connected
                 )
                 this@BleClient.plugin.devices[device.address] = Peripheral(this@BleClient.activity, result.device)
                 val res = JSObject()

@@ -78,7 +78,7 @@ pub(crate) async fn connection_state<R: Runtime>(
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     handler.lock().await.set_connection_update_channel(tx);
     update
-        .send(handler.lock().await.is_connected())
+        .send(handler.lock().await.is_connected().await)
         .expect("failed to send connection state");
     async_runtime::spawn(async move {
         while let Some(connected) = rx.recv().await {
@@ -106,6 +106,42 @@ pub(crate) async fn send<R: Runtime>(
     Ok(())
 }
 
+#[command]
+pub(crate) async fn recv<R: Runtime>(_app: AppHandle<R>, characteristic: Uuid) -> Result<Vec<u8>> {
+    let handler = get_handler()?;
+    let data = handler.lock().await.recv_data(characteristic).await?;
+    Ok(data)
+}
+
+#[command]
+pub(crate) async fn send_string<R: Runtime>(
+    app: AppHandle<R>,
+    characteristic: Uuid,
+    data: String,
+) -> Result<()> {
+    let data = data.as_bytes().to_vec();
+    send(app, characteristic, data).await
+}
+
+#[command]
+pub(crate) async fn recv_string<R: Runtime>(
+    app: AppHandle<R>,
+    characteristic: Uuid,
+) -> Result<String> {
+    let data = recv(app, characteristic).await?;
+    Ok(String::from_utf8(data).expect("failed to convert data to string"))
+}
+
 pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
-    tauri::generate_handler![scan, stop_scan, connect, disconnect, connection_state, send]
+    tauri::generate_handler![
+        scan,
+        stop_scan,
+        connect,
+        disconnect,
+        connection_state,
+        send,
+        send_string,
+        recv,
+        recv_string
+    ]
 }

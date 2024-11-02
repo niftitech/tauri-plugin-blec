@@ -5,6 +5,9 @@ const COMMANDS: &[&str] = &[
     "disconnect",
     "connection_state",
     "send",
+    "send_string",
+    "recv",
+    "recv_string",
 ];
 
 fn main() {

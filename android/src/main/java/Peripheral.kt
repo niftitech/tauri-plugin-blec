@@ -13,6 +13,13 @@ import com.plugin.blec.BleClientPlugin
 import org.json.JSONArray
 import java.util.UUID
 
+private fun bytesToJson(bytes: ByteArray):JSONArray{
+    val array = JSONArray()
+    for (byte in bytes){
+        array.put((byte))
+    }
+    return array
+}
 
 class Peripheral(private val activity: Activity, private val device: BluetoothDevice) {
     private var connected = false
@@ -60,7 +67,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             }
             val notification = JSObject();
             notification.put("uuid",characteristic.uuid)
-            notification.put("data",value)
+            notification.put("data",bytesToJson(value))
             this@Peripheral.notifyChannel!!.send(notification)
         }
 
@@ -72,11 +79,29 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             val id = characteristic?.uuid ?: return
             val invoke = this@Peripheral.onWriteInvoke[id]!!
             if (status != BluetoothGatt.GATT_SUCCESS){
-                invoke.reject("Write to characterisitc $id failed with status $status")
+                invoke.reject("Write to characteristic $id failed with status $status")
             } else {
                 invoke.resolve()
             }
             this@Peripheral.onWriteInvoke.remove(id)
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            val id = characteristic?.uuid ?: return
+            val invoke = this@Peripheral.onReadInvoke[id]!!
+            if (status != BluetoothGatt.GATT_SUCCESS){
+                invoke.reject("Read from characteristic $id failed with status $status")
+            } else {
+                val res = JSObject()
+                res.put("value",bytesToJson(value))
+                invoke.resolve(res)
+            }
+            this@Peripheral.onReadInvoke.remove(id)
         }
     }
 
@@ -190,7 +215,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
 
     @SuppressLint("MissingPermission")
     fun write(invoke: Invoke){
-        val args = invoke.parseArgs(BleClientPlugin.SendParams::class.java)
+        val args = invoke.parseArgs(BleClientPlugin.WriteParams::class.java)
         if (this.gatt == null){
             invoke.reject("No gatt server connected")
             return
@@ -200,10 +225,10 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             invoke.reject("Characterisitc ${args.characteristic} not found")
             return
         }
-        if (this.onWriteInvoke[args.characteristic!!] !=  null){
-            this.onWriteInvoke[args.characteristic!!]!!.reject("write was overwritten before finishing")
+        if (this.onWriteInvoke[args.characteristic] !=  null){
+            this.onWriteInvoke[args.characteristic]!!.reject("write was overwritten before finishing")
         }
-        this.onWriteInvoke[args.characteristic!!] = invoke
+        this.onWriteInvoke[args.characteristic] = invoke
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             this.gatt!!.writeCharacteristic(charac,args.data!!,if (args.withResponse){BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT}else{BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE})
         } else {
@@ -214,15 +239,24 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
         }
     }
 
-    /* @SuppressLint("MissingPermission")
-    fun read(){
+    @SuppressLint("MissingPermission")
+    fun read(invoke: Invoke){
+        val args = invoke.parseArgs(BleClientPlugin.ReadParams::class.java)
         synchronized(this.onReadInvoke) {
-            if (this.onReadInvoke[args.characteristic] == null) {
-                this.onReadInvoke[args.characteristic] = mutableListOf()
+            if (this.onReadInvoke[args.characteristic!!] != null) {
+                this.onReadInvoke[args.characteristic]!!.reject("read was overwritten before finishing")
             }
-            this.onReadInvoke[args.characteristic]!!.add(invoke)
+            this.onReadInvoke[args.characteristic] = invoke
+        }
+        if (this.gatt == null){
+            invoke.reject("No gatt server connected")
+            return
+        }
+        val charac = this.characteristics[args.characteristic!!]
+        if (charac == null){
+            invoke.reject("Characterisitc ${args.characteristic} not found")
+            return
         }
         this.gatt!!.readCharacteristic(charac)
     }
-     */
 }

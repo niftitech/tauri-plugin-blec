@@ -107,7 +107,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
         invoke.resolve()
     }
 
-    class SendParams() {
+    class WriteParams() {
         val address: String = ""
         val characteristic: UUID? = null
         val data: ByteArray? = null
@@ -115,12 +115,27 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     }
     @Command
     fun write(invoke:Invoke){
-        val args = invoke.parseArgs(SendParams::class.java)
+        val args = invoke.parseArgs(WriteParams::class.java)
         val device = this.devices[args.address]
         if (device == null){
             invoke.reject("Device not found")
             return
         }
         device.write(invoke)
+    }
+
+    class ReadParams(){
+        val address: String = ""
+        val characteristic: UUID? = null
+    }
+    @Command
+    fun read(invoke:Invoke){
+        val args = invoke.parseArgs(ReadParams::class.java)
+        val device = this.devices[args.address]
+        if (device == null){
+            invoke.reject("Device not found")
+            return
+        }
+        device.read(invoke)
     }
 }

@@ -12,7 +12,7 @@ use std::time::Duration;
 use tauri::async_runtime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::sleep;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]
@@ -28,7 +28,7 @@ struct Listener {
 }
 
 pub struct BleHandler {
-    connected: Option<Arc<Peripheral>>,
+    connected: Option<Peripheral>,
     characs: Vec<Characteristic>,
     devices: Arc<Mutex<HashMap<String, Peripheral>>>,
     adapter: Arc<Adapter>,
@@ -60,7 +60,7 @@ impl BleHandler {
         })
     }
 
-    pub fn is_connected(&self) -> bool {
+    pub async fn is_connected(&self) -> bool {
         self.connected.is_some()
     }
 
@@ -88,14 +88,14 @@ impl BleHandler {
         self.connect_service(service, &characs).await?;
         // start background task for notifications
         self.listen_handle = Some(async_runtime::spawn(listen_notify(
-            self.get_device().await?,
+            self.connected.clone(),
             self.notify_listeners.clone(),
         )));
         Ok(())
     }
 
     async fn connect_service(&mut self, service: Uuid, characs: &[Uuid]) -> Result<(), Error> {
-        let device = self.get_device().await?;
+        let device = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         device.discover_services().await?;
         let services = device.services();
         let s = services
@@ -112,9 +112,9 @@ impl BleHandler {
 
     async fn connect_device(&mut self, address: String) -> Result<(), Error> {
         debug!("connecting to {address}",);
-        if let Some(dev) = self.connected.clone() {
+        if let Some(dev) = self.connected.as_ref() {
             if address == fmt_addr(dev.address()) {
-                return Err(Error::AlreadyConnected.into());
+                return Err(Error::AlreadyConnected);
             }
         }
         let devices = self.devices.lock().await;
@@ -126,7 +126,7 @@ impl BleHandler {
             device.connect().await?;
             debug!("Connecting done");
         }
-        self.connected = Some(Arc::new(device.clone()));
+        self.connected = Some(device.clone());
         if let Some(tx) = &self.connection_update_channel {
             tx.send(true)
                 .await
@@ -174,6 +174,7 @@ impl BleHandler {
             })
             .await?;
         let mut self_devices = self.devices.clone();
+        let mut connected = self.connected.clone();
         let adapter = self.adapter.clone();
         tokio::task::spawn(async move {
             self_devices.lock().await.clear();
@@ -227,14 +228,14 @@ impl BleHandler {
     }
 
     pub async fn send_data(&mut self, c: Uuid, data: &[u8]) -> Result<(), Error> {
-        let dev = self.get_device().await?;
+        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = self.get_charac(c)?;
         dev.write(charac, &data, WriteType::WithoutResponse).await?;
         Ok(())
     }
 
     pub async fn recv_data(&mut self, c: Uuid) -> Result<Vec<u8>, Error> {
-        let dev = self.get_device().await?;
+        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = self.get_charac(c)?;
         let data = dev.read(charac).await?;
         Ok(data)
@@ -242,25 +243,7 @@ impl BleHandler {
 
     fn get_charac(&self, uuid: Uuid) -> Result<&Characteristic, Error> {
         let charac = self.characs.iter().find(|c| c.uuid == uuid);
-        charac.ok_or(Error::CharacNotAvailable(uuid.to_string()).into())
-    }
-
-    async fn get_device(&mut self) -> Result<Arc<Peripheral>, Error> {
-        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
-        if !dev.is_connected().await? {
-            self.disconnect().await?;
-            return Err(Error::NoDeviceConnected.into());
-        } else {
-            return Ok(dev.clone());
-        }
-    }
-
-    pub async fn check_connected(&self) -> Result<bool, Error> {
-        let mut connected = false;
-        if let Some(dev) = self.connected.as_ref() {
-            connected = dev.is_connected().await?;
-        }
-        Ok(connected)
+        charac.ok_or(Error::CharacNotAvailable(uuid.to_string()))
     }
 
     pub async fn subscribe(
@@ -268,7 +251,7 @@ impl BleHandler {
         c: Uuid,
         callback: impl Fn(&[u8]) + Send + Sync + 'static,
     ) -> Result<(), Error> {
-        let dev = self.get_device().await?;
+        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = self.get_charac(c)?;
         dev.subscribe(charac).await?;
         self.notify_listeners.lock().await.push(Listener {
@@ -295,13 +278,14 @@ impl BleHandler {
 
     pub async fn connected_device(&self) -> Result<BleDevice, Error> {
         let p = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
-        let d = BleDevice::from_peripheral(&**p).await?;
+        let d = BleDevice::from_peripheral(p).await?;
         Ok(d)
     }
 }
 
-async fn listen_notify(dev: Arc<Peripheral>, listeners: Arc<Mutex<Vec<Listener>>>) {
+async fn listen_notify(dev: Option<Peripheral>, listeners: Arc<Mutex<Vec<Listener>>>) {
     let mut stream = dev
+        .expect("no device connected")
         .notifications()
         .await
         .expect("failed to get notifications stream");

@@ -72,10 +72,19 @@ async function connect(device: BleDevice) {
 const sendData = ref('')
 
 async function send() {
-  await invoke('plugin:blec|send', {
+  await invoke('plugin:blec|send_string', {
     characteristic: CHARACTERISTIC_UUID,
-    data: new TextEncoder().encode(sendData.value)
+    data: sendData.value
   })
+}
+
+const recvData = ref('')
+
+async function read() {
+  let res = await invoke<string>('plugin:blec|recv_string', {
+    characteristic: CHARACTERISTIC_UUID
+  })
+  recvData.value = res
 }
 </script>
 
@@ -87,8 +96,14 @@ async function send() {
     <button :onclick="disconnect" style="margin-bottom: 5px;">Disconnect</button>
     <div v-if="connected">
       <p>Connected</p>
-      <input v-model="sendData" placeholder="Send data" />
-      <button class="ml" :onclick="send">Send</button>
+      <div class="row">
+        <input v-model="sendData" placeholder="Send data" />
+        <button class="ml" :onclick="send">Send</button>
+      </div>
+      <div class="row">
+        <input v-model="recvData" readonly />
+        <button class="ml" :onclick="read">Read</button>
+      </div>
     </div>
     <div v-else v-for="device in devices" class="row">
       <BleDev :key="device.address" :device="device" :onclick="() => connect(device)" />
@@ -144,6 +159,7 @@ async function send() {
 .row {
   display: flex;
   justify-content: center;
+  margin-bottom: 5px;
 }
 
 .ml {
