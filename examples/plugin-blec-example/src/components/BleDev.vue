@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { BleDevice } from 'tauri-plugin-blec'
 
-const props = defineProps<{
+defineProps<{
     device: BleDevice
 }>()
 </script>
@@ -10,7 +10,7 @@ const props = defineProps<{
     <div class="box">
         <h1>{{ device.name }}</h1>
         <p>{{ device.address }}</p>
-        <p>{{ device.is_conncted }}</p>
+        <p>Connected: {{ device.isConnected }}</p>
     </div>
 </template>
 

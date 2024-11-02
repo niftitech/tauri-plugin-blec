@@ -8,6 +8,12 @@ rust-version = "1.77.2"
 exclude = ["/examples", "/webview-dist", "/webview-src", "/node_modules"]
 links = "tauri-plugin-blec"
 
+[workspace]
+members = [
+    "examples/plugin-blec-example/src-tauri",
+    "examples/test-server"
+]
+
 [dependencies]
 tauri = { version = "2.0.6", features = ["wry"] }
 serde = "1.0"

@@ -8,6 +8,8 @@ const COMMANDS: &[&str] = &[
     "send_string",
     "recv",
     "recv_string",
+    "subscribe",
+    "subscribe_string",
 ];
 
 fn main() {

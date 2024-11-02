@@ -11,6 +11,8 @@ Default permissions for the plugin
 - `allow-recv`
 - `allow-send-string`
 - `allow-recv-string`
+- `allow-subscribe`
+- `allow-subscribe-string`
 
 ## Permission Table
 
@@ -277,6 +279,58 @@ Enables the stop_scan command without any pre-configured scope.
 <td>
 
 Denies the stop_scan command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-subscribe`
+
+</td>
+<td>
+
+Enables the subscribe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-subscribe`
+
+</td>
+<td>
+
+Denies the subscribe command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-subscribe-string`
+
+</td>
+<td>
+
+Enables the subscribe_string command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-subscribe-string`
+
+</td>
+<td>
+
+Denies the subscribe_string command without any pre-configured scope.
 
 </td>
 </tr>

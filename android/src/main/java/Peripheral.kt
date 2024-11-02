@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.os.Build
 import app.tauri.plugin.Channel
@@ -12,6 +13,7 @@ import app.tauri.plugin.JSObject
 import com.plugin.blec.BleClientPlugin
 import org.json.JSONArray
 import java.util.UUID
+
 
 private fun bytesToJson(bytes: ByteArray):JSONArray{
     val array = JSONArray()
@@ -22,6 +24,8 @@ private fun bytesToJson(bytes: ByteArray):JSONArray{
 }
 
 class Peripheral(private val activity: Activity, private val device: BluetoothDevice) {
+    private val CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
     private var connected = false
     private var gatt: BluetoothGatt? = null
     private var services: List<BluetoothGattService> = listOf()
@@ -31,6 +35,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     private var notifyChannel:Channel? = null
     private val onReadInvoke:MutableMap<UUID,Invoke> = mutableMapOf()
     private val onWriteInvoke:MutableMap<UUID,Invoke> = mutableMapOf()
+    private var onDescriptorInvoke: Invoke? = null
     private val callback = object:BluetoothGattCallback(){
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
             if(status == BluetoothGatt.GATT_SUCCESS && newState==BluetoothGatt.STATE_CONNECTED && gatt!=null){
@@ -62,9 +67,11 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
+            println("Charactersitic changed")
             if (this@Peripheral.notifyChannel == null){
                 return
             }
+            println("Sending notification")
             val notification = JSObject();
             notification.put("uuid",characteristic.uuid)
             notification.put("data",bytesToJson(value))
@@ -102,6 +109,20 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
                 invoke.resolve(res)
             }
             this@Peripheral.onReadInvoke.remove(id)
+        }
+
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt?,
+            descriptor: BluetoothGattDescriptor?,
+            status: Int
+        ) {
+            if (status != BluetoothGatt.GATT_SUCCESS){
+                this@Peripheral.onDescriptorInvoke?.reject("descriptor write failed with status: $status")
+            } else if (descriptor?.uuid != CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR){
+                this@Peripheral.onDescriptorInvoke?.reject("unexpected write to descriptor: ${descriptor?.uuid}")
+            } else {
+                this@Peripheral.onDescriptorInvoke?.resolve()
+            }
         }
     }
 
@@ -254,9 +275,38 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
         }
         val charac = this.characteristics[args.characteristic!!]
         if (charac == null){
-            invoke.reject("Characterisitc ${args.characteristic} not found")
+            invoke.reject("Characteristic ${args.characteristic} not found")
             return
         }
         this.gatt!!.readCharacteristic(charac)
+    }
+
+    @SuppressLint("MissingPermission")
+    fun subscribe(invoke: Invoke){
+        val args = invoke.parseArgs(BleClientPlugin.ReadParams::class.java)
+        if (this.gatt == null){
+            invoke.reject("No gatt server connected")
+            return
+        }
+        val charac = this.characteristics[args.characteristic!!]
+        if (charac == null){
+            invoke.reject("Characteristic ${args.characteristic} not found")
+            return
+        }
+        println("Subscribing to characteristic")
+
+        if (!this.gatt!!.setCharacteristicNotification(charac,true)){
+            invoke.reject("Failed to set notification status")
+        }
+        this.onDescriptorInvoke = invoke
+        val descriptor: BluetoothGattDescriptor = charac.getDescriptor(CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            this.gatt!!.writeDescriptor(descriptor,BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+        } else {
+            @Suppress("DEPRECATION")
+            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            @Suppress("DEPRECATION")
+            this.gatt!!.writeDescriptor(descriptor)
+        }
     }
 }

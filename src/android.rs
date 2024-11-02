@@ -167,6 +167,13 @@ struct BoolResult {
     result: bool,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadParams {
+    address: BDAddr,
+    characteristic: Uuid,
+}
+
 #[async_trait::async_trait]
 impl btleplug::api::Peripheral for Peripheral {
     fn id(&self) -> PeripheralId {
@@ -312,12 +319,6 @@ impl btleplug::api::Peripheral for Peripheral {
     }
 
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
-        #[derive(serde::Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct ReadParams {
-            address: BDAddr,
-            characteristic: Uuid,
-        }
         #[derive(serde::Deserialize)]
         struct ReadResult {
             value: Vec<u8>,
@@ -336,7 +337,16 @@ impl btleplug::api::Peripheral for Peripheral {
     }
 
     async fn subscribe(&self, characteristic: &Characteristic) -> Result<()> {
-        todo!()
+        get_handle()
+            .run_mobile_plugin(
+                "subscribe",
+                ReadParams {
+                    address: self.address,
+                    characteristic: characteristic.uuid,
+                },
+            )
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(())
     }
 
     async fn unsubscribe(&self, characteristic: &Characteristic) -> Result<()> {
@@ -375,7 +385,7 @@ impl btleplug::api::Peripheral for Peripheral {
         });
         get_handle()
             .run_mobile_plugin(
-                "subscribe",
+                "notifications",
                 NotifyParams {
                     address: self.address,
                     channel,

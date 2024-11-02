@@ -96,7 +96,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     }
 
     @Command
-    fun subscribe(invoke:Invoke){
+    fun notifications(invoke:Invoke){
         val args = invoke.parseArgs(NotifyParams::class.java)
         val device = this.devices[args.address]
         if (device == null){
@@ -129,7 +129,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
         val characteristic: UUID? = null
     }
     @Command
-    fun read(invoke:Invoke){
+    fun read(invoke: Invoke){
         val args = invoke.parseArgs(ReadParams::class.java)
         val device = this.devices[args.address]
         if (device == null){
@@ -137,5 +137,16 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
             return
         }
         device.read(invoke)
+    }
+
+    @Command
+    fun subscribe(invoke: Invoke){
+        val args = invoke.parseArgs(ReadParams::class.java)
+        val device = this.devices[args.address]
+        if (device == null){
+            invoke.reject("Device not found")
+            return
+        }
+        device.subscribe(invoke)
     }
 }

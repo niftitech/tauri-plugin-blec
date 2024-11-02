@@ -86,6 +86,25 @@ async function read() {
   })
   recvData.value = res
 }
+
+const notifyData = ref('')
+async function subscribe() {
+  if (notifyData.value) {
+    await invoke('plugin:blec|unsubscribe', {
+      characteristic: CHARACTERISTIC_UUID
+    })
+    notifyData.value = ''
+  } else {
+    let onData = new Channel<string>()
+    onData.onmessage = (data: string) => {
+      notifyData.value = data
+    }
+    await invoke('plugin:blec|subscribe_string', {
+      characteristic: CHARACTERISTIC_UUID,
+      onData
+    })
+  }
+}
 </script>
 
 <template>
@@ -93,9 +112,9 @@ async function read() {
     <h1>Welcome to the blec plugin!</h1>
     <button :onclick="startScan" style="margin-bottom: 5px;">Start Scan</button>
     <button :onclick="stopScan" style="margin-bottom: 5px;">Stop Scan</button>
-    <button :onclick="disconnect" style="margin-bottom: 5px;">Disconnect</button>
     <div v-if="connected">
       <p>Connected</p>
+      <button :onclick="disconnect" style="margin-bottom: 5px;">Disconnect</button>
       <div class="row">
         <input v-model="sendData" placeholder="Send data" />
         <button class="ml" :onclick="send">Send</button>
@@ -103,6 +122,10 @@ async function read() {
       <div class="row">
         <input v-model="recvData" readonly />
         <button class="ml" :onclick="read">Read</button>
+      </div>
+      <div class="row">
+        <input v-model="notifyData" readonly />
+        <button class="ml" :onclick="subscribe">{{ notifyData ? "Unsubscribe" : "Subscribe" }}</button>
       </div>
     </div>
     <div v-else v-for="device in devices" class="row">
@@ -164,6 +187,7 @@ async function read() {
 
 .ml {
   margin-left: 5px;
+  min-width: 35%;
 }
 
 a {

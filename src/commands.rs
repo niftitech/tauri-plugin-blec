@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{async_runtime, command, AppHandle, Runtime};
+use tokio::sync::mpsc;
 use tracing::info;
 use uuid::Uuid;
 
@@ -132,6 +133,56 @@ pub(crate) async fn recv_string<R: Runtime>(
     Ok(String::from_utf8(data).expect("failed to convert data to string"))
 }
 
+async fn subscribe_channel(characteristic: Uuid) -> Result<mpsc::Receiver<Vec<u8>>> {
+    let handler = get_handler()?;
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    handler
+        .lock()
+        .await
+        .subscribe(characteristic, move |data| {
+            info!("subscribe_channel: {:?}", data);
+            tx.try_send(data.to_vec())
+                .expect("failed to send data to the channel");
+        })
+        .await?;
+    Ok(rx)
+}
+#[command]
+pub(crate) async fn subscribe<R: Runtime>(
+    _app: AppHandle<R>,
+    characteristic: Uuid,
+    on_data: Channel<Vec<u8>>,
+) -> Result<()> {
+    let mut rx = subscribe_channel(characteristic).await?;
+    async_runtime::spawn(async move {
+        while let Some(data) = rx.recv().await {
+            on_data
+                .send(data)
+                .expect("failed to send data to the front-end");
+        }
+    });
+    Ok(())
+}
+
+#[command]
+pub(crate) async fn subscribe_string<R: Runtime>(
+    _app: AppHandle<R>,
+    characteristic: Uuid,
+    on_data: Channel<String>,
+) -> Result<()> {
+    let mut rx = subscribe_channel(characteristic).await?;
+    async_runtime::spawn(async move {
+        while let Some(data) = rx.recv().await {
+            info!("subscribe_string: {:?}", data);
+            let data = String::from_utf8(data).expect("failed to convert data to string");
+            on_data
+                .send(data)
+                .expect("failed to send data to the front-end");
+        }
+    });
+    Ok(())
+}
+
 pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
     tauri::generate_handler![
         scan,
@@ -142,6 +193,8 @@ pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
         send,
         send_string,
         recv,
-        recv_string
+        recv_string,
+        subscribe,
+        subscribe_string
     ]
 }

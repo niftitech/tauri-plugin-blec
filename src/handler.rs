@@ -290,7 +290,13 @@ async fn listen_notify(dev: Option<Peripheral>, listeners: Arc<Mutex<Vec<Listene
         .await
         .expect("failed to get notifications stream");
     while let Some(data) = stream.next().await {
+        info!(
+            "listen_notify: data.uuid: {:?}, listener:{}",
+            data.uuid,
+            listeners.lock().await.len()
+        );
         for l in listeners.lock().await.iter() {
+            info!("listener.uuid: {:?}", l.uuid);
             if l.uuid == data.uuid {
                 let data = data.value.clone();
                 let cb = l.callback.clone();
