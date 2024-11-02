@@ -172,7 +172,7 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
                     result.rssi,
                     connected
                 )
-                this@BleClient.plugin.devices[device.address] = Peripheral(this@BleClient.activity, result.device)
+                this@BleClient.plugin.devices[device.address] = Peripheral(this@BleClient.activity, result.device, this@BleClient.plugin)
                 val res = JSObject()
                 res.put("result", device.toJsObject())
                 args.onDevice!!.send(res)

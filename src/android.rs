@@ -11,7 +11,6 @@ use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
-    fmt::Display,
     pin::Pin,
     vec,
 };
@@ -75,7 +74,24 @@ impl btleplug::api::Central for Adapter {
     type Peripheral = Peripheral;
 
     async fn events(&self) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>> {
-        todo!()
+        let (tx, rx) = tokio::sync::mpsc::channel::<CentralEvent>(1);
+        let stream = ReceiverStream::new(rx);
+        let channel: Channel = Channel::new(move |response| {
+            match response.deserialize::<CentralEvent>() {
+                Ok(event) => tx
+                    .blocking_send(event)
+                    .expect("failed to send notification"),
+                Err(e) => {
+                    tracing::error!("failed to deserialize notification: {:?}", e);
+                    return Err(tauri::Error::from(e));
+                }
+            };
+            Ok(())
+        });
+        get_handle()
+            .run_mobile_plugin("events", channel)
+            .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+        Ok(Box::pin(stream))
     }
 
     async fn start_scan(&self, filter: btleplug::api::ScanFilter) -> Result<()> {

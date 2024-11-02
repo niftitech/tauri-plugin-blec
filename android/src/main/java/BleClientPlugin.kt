@@ -21,6 +21,7 @@ class ConnectParams{
 @TauriPlugin
 class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     var devices: MutableMap<String, Peripheral> = mutableMapOf();
+    var eventChannel: Channel? = null;
     private val client = BleClient(activity,this)
 
     @Command
@@ -31,6 +32,12 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     @Command
     fun stop_scan(invoke: Invoke){
         client.stopScan(invoke)
+    }
+
+    @Command
+    fun events(invoke: Invoke){
+        this.eventChannel = invoke.parseArgs(Channel::class.java)
+        invoke.resolve()
     }
 
     @Command

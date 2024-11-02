@@ -23,7 +23,7 @@ private fun bytesToJson(bytes: ByteArray):JSONArray{
     return array
 }
 
-class Peripheral(private val activity: Activity, private val device: BluetoothDevice) {
+class Peripheral(private val activity: Activity, private val device: BluetoothDevice, private val plugin: BleClientPlugin) {
     private val CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     private var connected = false
@@ -36,16 +36,36 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     private val onReadInvoke:MutableMap<UUID,Invoke> = mutableMapOf()
     private val onWriteInvoke:MutableMap<UUID,Invoke> = mutableMapOf()
     private var onDescriptorInvoke: Invoke? = null
+
+    private enum class Event{
+        DeviceConnected,
+        DeviceDisconnected
+    }
+    private fun sendEvent(event: Event){
+        val channel = this.plugin.eventChannel?: return
+        val data = JSObject()
+        if (event == Event.DeviceConnected){
+            data.put("DeviceConnected",this.device.address)
+        } else if (event == Event.DeviceDisconnected){
+            data.put("DeviceDisconnected",this.device.address)
+        }
+        println("sending event $data")
+        channel.send(data)
+    }
+
     private val callback = object:BluetoothGattCallback(){
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
             if(status == BluetoothGatt.GATT_SUCCESS && newState==BluetoothGatt.STATE_CONNECTED && gatt!=null){
                 this@Peripheral.connected = true
                 this@Peripheral.gatt = gatt
                 this@Peripheral.onConnectionStateChange?.invoke(true,"")
+                this@Peripheral.sendEvent(Event.DeviceConnected)
+
             } else {
                 this@Peripheral.connected = false
                 this@Peripheral.gatt = null
                 this@Peripheral.onConnectionStateChange?.invoke(false,"Not connected. Status: $status, State: $newState")
+                this@Peripheral.sendEvent(Event.DeviceDisconnected)
             }
         }
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
