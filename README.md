@@ -7,7 +7,7 @@ All other platforms use the btleplug implementation.
 
 ## Docs
 - [Rust docs](https://docs.rs/crate/tauri-plugin-blec/latest)
-- [JavaScript docs]()
+- [JavaScript docs](https://mnlphlp.github.io/tauri-plugin-blec/)
 
 ## Installation
 ### Install the rust part of the plugin:
