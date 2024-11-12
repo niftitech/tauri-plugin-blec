@@ -47,7 +47,7 @@ async fn get_central() -> Result<Adapter, Error> {
 }
 
 impl Handler {
-    pub async fn new() -> Result<Self, Error> {
+    pub(crate) async fn new() -> Result<Self, Error> {
         let central = get_central().await?;
         Ok(Self {
             devices: Arc::new(Mutex::new(HashMap::new())),
@@ -61,14 +61,42 @@ impl Handler {
         })
     }
 
+    /// Returns true if a device is connected
     pub fn is_connected(&self) -> bool {
         self.connected.is_some()
     }
 
+    /// Takes a sender that will be used to send changes in the connection status
+    /// # Example
+    /// ```no_run
+    /// use tauri::async_runtime;
+    /// use tokio::sync::mpsc;
+    /// async_runtime::block_on(async {
+    ///     let handler = tauri_plugin_blec::get_handler().unwrap();
+    ///     let (tx, mut rx) = mpsc::channel(1);
+    ///     handler.lock().await.set_connection_update_channel(tx);
+    ///     while let Some(connected) = rx.recv().await {
+    ///         println!("Connected: {connected}");
+    ///     }
+    /// });
+    /// ```
     pub fn set_connection_update_channel(&mut self, tx: mpsc::Sender<bool>) {
         self.connection_update_channel = Some(tx);
     }
 
+    /// Connects to the given address
+    /// If a callback is provided, it will be called when the device is disconnected
+    /// # Errors
+    /// Returns an error if no devices are found, if the device is already connected,
+    /// if the connection fails, or if the service/characteristics discovery fails
+    /// # Example
+    /// ```no_run
+    /// use tauri::async_runtime;
+    /// async_runtime::block_on(async {
+    ///    let handler = tauri_plugin_blec::get_handler().unwrap();
+    ///    handler.lock().await.connect("00:00:00:00:00:00".to_string(),Some(|| println!("disconnected"))).await.unwrap();
+    /// });
+    /// ```
     pub async fn connect(
         &mut self,
         address: String,
@@ -130,6 +158,9 @@ impl Handler {
         Ok(())
     }
 
+    /// Disconnects from the connected device
+    /// # Errors
+    /// Returns an error if no device is connected or if the disconnect operation fails
     pub async fn disconnect(&mut self) -> Result<(), Error> {
         debug!("disconnecting");
         if let Some(handle) = self.listen_handle.take() {
@@ -156,7 +187,6 @@ impl Handler {
     }
 
     /// Scans for [timeout] milliseconds and periodically sends discovered devices
-    /// Also returns vector with all devices after timeout
     pub async fn discover(
         &self,
         tx: Option<mpsc::Sender<Vec<BleDevice>>>,
@@ -220,6 +250,21 @@ impl Handler {
         devices
     }
 
+    /// Sends data to the given characteristic of the connected device
+    /// # Errors
+    /// Returns an error if no device is connected or the characteristic is not available
+    /// or if the write operation fails
+    /// # Example
+    /// ```no_run
+    /// use tauri::async_runtime;
+    /// use uuid::{Uuid,uuid};
+    /// const CHARACTERISTIC_UUID: Uuid = uuid!("51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B");
+    /// async_runtime::block_on(async {
+    ///     let handler = tauri_plugin_blec::get_handler().unwrap();
+    ///     let data = [1,2,3,4,5];
+    ///     let response = handler.lock().await.send_data(CHARACTERISTIC_UUID,&data).await.unwrap();
+    /// });
+    /// ```
     pub async fn send_data(&mut self, c: Uuid, data: &[u8]) -> Result<(), Error> {
         let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = self.get_charac(c)?;
@@ -227,6 +272,21 @@ impl Handler {
         Ok(())
     }
 
+    /// Receives data from the given characteristic of the connected device
+    /// Returns the data as a vector of bytes
+    /// # Errors
+    /// Returns an error if no device is connected or the characteristic is not available
+    /// or if the read operation fails
+    /// # Example
+    /// ```no_run
+    /// use tauri::async_runtime;
+    /// use uuid::{Uuid,uuid};
+    /// const CHARACTERISTIC_UUID: Uuid = uuid!("51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B");
+    /// async_runtime::block_on(async {
+    ///     let handler = tauri_plugin_blec::get_handler().unwrap();
+    ///     let response = handler.lock().await.recv_data(CHARACTERISTIC_UUID).await.unwrap();
+    /// });
+    /// ```
     pub async fn recv_data(&mut self, c: Uuid) -> Result<Vec<u8>, Error> {
         let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = self.get_charac(c)?;
@@ -239,6 +299,21 @@ impl Handler {
         charac.ok_or(Error::CharacNotAvailable(uuid.to_string()))
     }
 
+    /// Subscribe to notifications from the given characteristic
+    /// The callback will be called whenever a notification is received
+    /// # Errors
+    /// Returns an error if no device is connected or the characteristic is not available
+    /// or if the subscribe operation fails
+    /// # Example
+    /// ```no_run
+    /// use tauri::async_runtime;
+    /// use uuid::{Uuid,uuid};
+    /// const CHARACTERISTIC_UUID: Uuid = uuid!("51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B");
+    /// async_runtime::block_on(async {
+    ///     let handler = tauri_plugin_blec::get_handler().unwrap();
+    ///     let response = handler.lock().await.subscribe(CHARACTERISTIC_UUID,|data| println!("received {data:?}")).await.unwrap();
+    /// });
+    /// ```
     pub async fn subscribe(
         &mut self,
         c: Uuid,
@@ -254,6 +329,11 @@ impl Handler {
         Ok(())
     }
 
+    /// Unsubscribe from notifications for the given characteristic
+    /// This will also remove the callback from the list of listeners
+    /// # Errors
+    /// Returns an error if no device is connected or the characteristic is not available
+    /// or if the unsubscribe operation fails
     pub async fn unsubscribe(&mut self, c: Uuid) -> Result<(), Error> {
         let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = self.get_charac(c)?;
@@ -271,13 +351,15 @@ impl Handler {
     }
 
     pub(crate) async fn handle_event(&mut self, event: CentralEvent) -> Result<(), Error> {
-        // logi!("handling event {event:?}");
         match event {
             CentralEvent::DeviceDisconnected(_) => self.disconnect().await,
             _ => Ok(()),
         }
     }
 
+    /// Returns the connected device
+    /// # Errors
+    /// Returns an error if no device is connected
     pub async fn connected_device(&self) -> Result<BleDevice, Error> {
         let p = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let d = BleDevice::from_peripheral(p).await?;
