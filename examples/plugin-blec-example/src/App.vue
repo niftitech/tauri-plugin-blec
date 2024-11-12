@@ -71,7 +71,7 @@ async function test() {
       </div>
     </div>
     <div v-else v-for="device in devices" class="row">
-      <BleDev :key="device.address" :device="device" :onclick="() => connect(device)" />
+      <BleDev :key="device.address" :device="device" :onclick="() => connect(device.address, () => console.log('disconnected'))" />
     </div>
   </div>
 </template>
