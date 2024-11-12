@@ -1,7 +1,7 @@
 {
-  "name": "tauri-plugin-blec-api",
+  "name": "@mnlphlp/plugin-blec",
   "version": "0.1.0",
-  "author": "You",
+  "author": "Manuel Philipp",
   "description": "",
   "type": "module",
   "types": "./dist-js/index.d.ts",

@@ -1,109 +1,31 @@
 <script setup lang="ts">
 // This starter template is using Vue 3 <script setup> SFCs
 // Check out https://vuejs.org/api/sfc-script-setup.html#script-setup
-import { BleDevice } from 'tauri-plugin-blec'
+import { BleDevice, getConnectionUpdates, startScan, sendString, readString, unsubscribe, subscribeString, stopScan, connect, disconnect } from 'tauri-plugin-blec'
 import { onMounted, ref } from 'vue';
 import BleDev from './components/BleDev.vue'
-import { Channel, invoke } from '@tauri-apps/api/core';
 
 const devices = ref<BleDevice[]>([])
 const connected = ref(false)
 
-async function get_connection_updates() {
-  let connection_chan = new Channel<boolean>()
-  connection_chan.onmessage = (state: boolean) => {
-    console.log('connection state', connected)
-    connected.value = state
-  }
-  await invoke('plugin:blec|connection_state', { update: connection_chan })
-}
 onMounted(async () => {
-  await get_connection_updates()
+  await getConnectionUpdates((state) => connected.value = state)
 })
 
-interface Devices {
-  devices: BleDevice[]
-}
-async function startScan() {
-  console.log('start scan')
-  devices.value = []
-  let onDevices = new Channel<Devices>()
-  onDevices.onmessage = (d: Devices) => {
-    console.log('onDevices', d.devices.map(d => d.name))
-    devices.value = d.devices
-  }
-  console.log(await invoke<Devices>('plugin:blec|scan', {
-    timeout: 5000,
-    onDevices
-  }))
-}
-
-async function stopScan() {
-  console.log('stop scan')
-  await invoke('plugin:blec|stop_scan')
-}
-
-async function disconnect() {
-  console.log('disconnect')
-  await invoke('plugin:blec|disconnect')
-}
-
-const SERVICE_UUID = 'A07498CA-AD5B-474E-940D-16F1FBE7E8CD'
+// const SERVICE_UUID = 'A07498CA-AD5B-474E-940D-16F1FBE7E8CD'
 const CHARACTERISTIC_UUID = '51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B'
-async function connect(device: BleDevice) {
-  console.log('connect', device.address)
-  let onDisconnect = new Channel()
-  onDisconnect.onmessage = () => {
-    console.log(`device ${device.address} disconnected`)
-  }
-  try {
-    await invoke('plugin:blec|connect', {
-      address: device.address,
-      service: SERVICE_UUID,
-      characs: [CHARACTERISTIC_UUID],
-      onDisconnect
-    })
-    devices.value = []
-  } catch (e) {
-    console.error(e)
-    await disconnect()
-  }
-}
 
 const sendData = ref('')
-
-async function send() {
-  await invoke('plugin:blec|send_string', {
-    characteristic: CHARACTERISTIC_UUID,
-    data: sendData.value
-  })
-}
-
 const recvData = ref('')
 
-async function read() {
-  let res = await invoke<string>('plugin:blec|recv_string', {
-    characteristic: CHARACTERISTIC_UUID
-  })
-  recvData.value = res
-}
 
 const notifyData = ref('')
 async function subscribe() {
   if (notifyData.value) {
-    await invoke('plugin:blec|unsubscribe', {
-      characteristic: CHARACTERISTIC_UUID
-    })
+    unsubscribe(CHARACTERISTIC_UUID)
     notifyData.value = ''
   } else {
-    let onData = new Channel<string>()
-    onData.onmessage = (data: string) => {
-      notifyData.value = data
-    }
-    await invoke('plugin:blec|subscribe_string', {
-      characteristic: CHARACTERISTIC_UUID,
-      onData
-    })
+    subscribeString(CHARACTERISTIC_UUID, (data: string) => notifyData.value = data)
   }
 }
 </script>
@@ -111,18 +33,19 @@ async function subscribe() {
 <template>
   <div class="container">
     <h1>Welcome to the blec plugin!</h1>
-    <button :onclick="startScan" style="margin-bottom: 5px;">Start Scan</button>
+    <button :onclick="() => startScan((dev: BleDevice[]) => devices = dev)" style="margin-bottom: 5px;">Start
+      Scan</button>
     <button :onclick="stopScan" style="margin-bottom: 5px;">Stop Scan</button>
     <div v-if="connected">
       <p>Connected</p>
       <button :onclick="disconnect" style="margin-bottom: 5px;">Disconnect</button>
       <div class="row">
         <input v-model="sendData" placeholder="Send data" />
-        <button class="ml" :onclick="send">Send</button>
+        <button class="ml" :onclick="() => sendString(CHARACTERISTIC_UUID, sendData)">Send</button>
       </div>
       <div class="row">
         <input v-model="recvData" readonly />
-        <button class="ml" :onclick="read">Read</button>
+        <button class="ml" :onclick="async () => recvData = await readString(CHARACTERISTIC_UUID)">Read</button>
       </div>
       <div class="row">
         <input v-model="notifyData" readonly />

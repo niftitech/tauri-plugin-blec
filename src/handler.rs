@@ -71,8 +71,6 @@ impl BleHandler {
     pub async fn connect(
         &mut self,
         address: String,
-        service: Uuid,
-        characs: Vec<Uuid>,
         on_disconnect: Option<impl Fn() + Send + 'static>,
     ) -> Result<(), Error> {
         if self.devices.lock().await.len() == 0 {
@@ -85,7 +83,7 @@ impl BleHandler {
             self.on_disconnect = Some(Mutex::new(Box::new(cb)));
         }
         // discover service/characteristics
-        self.connect_service(service, &characs).await?;
+        self.connect_services().await?;
         // start background task for notifications
         self.listen_handle = Some(async_runtime::spawn(listen_notify(
             self.connected.clone(),
@@ -94,16 +92,12 @@ impl BleHandler {
         Ok(())
     }
 
-    async fn connect_service(&mut self, service: Uuid, characs: &[Uuid]) -> Result<(), Error> {
+    async fn connect_services(&mut self) -> Result<(), Error> {
         let device = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         device.discover_services().await?;
         let services = device.services();
-        let s = services
-            .iter()
-            .find(|s| s.uuid == service)
-            .ok_or(Error::ServiceNotFound)?;
-        for c in &s.characteristics {
-            if characs.contains(&c.uuid) {
+        for s in services {
+            for c in &s.characteristics {
                 self.characs.push(c.clone());
             }
         }

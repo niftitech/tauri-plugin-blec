@@ -1,23 +1,18 @@
-use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{async_runtime, command, AppHandle, Runtime};
 use tokio::sync::mpsc;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::error::{self, Result};
+use crate::error::Result;
 use crate::get_handler;
 use crate::models::BleDevice;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Devices {
-    devices: Vec<BleDevice>,
-}
 #[command]
 pub(crate) async fn scan<R: Runtime>(
     _app: AppHandle<R>,
     timeout: u64,
-    on_devices: Channel<Devices>,
+    on_devices: Channel<Vec<BleDevice>>,
 ) -> Result<()> {
     tracing::info!("Scanning for BLE devices");
     let handler = get_handler()?;
@@ -25,7 +20,7 @@ pub(crate) async fn scan<R: Runtime>(
     async_runtime::spawn(async move {
         while let Some(devices) = rx.recv().await {
             on_devices
-                .send(Devices { devices })
+                .send(devices)
                 .expect("failed to send device to the front-end");
         }
     });
@@ -45,8 +40,6 @@ pub(crate) async fn stop_scan<R: Runtime>(_app: AppHandle<R>) -> Result<()> {
 pub(crate) async fn connect<R: Runtime>(
     _app: AppHandle<R>,
     address: String,
-    service: Uuid,
-    characs: Vec<Uuid>,
     on_disconnect: Channel<()>,
 ) -> Result<()> {
     tracing::info!("Connecting to BLE device: {:?}", address);
@@ -56,9 +49,7 @@ pub(crate) async fn connect<R: Runtime>(
             .send(())
             .expect("failed to send disconnect event to the front-end");
     };
-    handler
-        .connect(address, service, characs, Some(disconnct_handler))
-        .await?;
+    handler.connect(address, Some(disconnct_handler)).await?;
     Ok(())
 }
 

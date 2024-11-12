@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { BleDevice } from 'tauri-plugin-blec'
 
-defineProps<{
+const props = defineProps<{
     device: BleDevice
 }>()
+
+console.log(props.device)
 </script>
 
 <template>

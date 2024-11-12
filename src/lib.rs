@@ -24,6 +24,7 @@ pub fn init() -> TauriPlugin<Wry> {
     let handler = async_runtime::block_on(BleHandler::new()).expect("failed to initialize handler");
     let _ = HANDLER.set(Mutex::new(handler));
 
+    #[allow(unused)]
     Builder::new("blec")
         .invoke_handler(commands::commands())
         .setup(|app, api| {
