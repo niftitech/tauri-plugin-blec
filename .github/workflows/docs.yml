@@ -30,7 +30,7 @@ jobs:
             - name: Node Setup
               uses: actions/setup-node@v4
             - name: Build Docs
-              run: yarn typedoc
+              run: yarn && yarn typedoc
             - name: Setup Pages
               uses: actions/configure-pages@v5
             - name: Upload artifact
