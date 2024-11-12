@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // This starter template is using Vue 3 <script setup> SFCs
 // Check out https://vuejs.org/api/sfc-script-setup.html#script-setup
-import { BleDevice, getConnectionUpdates, startScan, sendString, readString, unsubscribe, subscribeString, stopScan, connect, disconnect } from 'tauri-plugin-blec'
+import { BleDevice, getConnectionUpdates, startScan, sendString, readString, unsubscribe, subscribeString, stopScan, connect, disconnect } from '@mnlphlp/plugin-blec'
 import { onMounted, ref } from 'vue';
 import BleDev from './components/BleDev.vue'
+import { invoke } from '@tauri-apps/api/core';
 
 const devices = ref<BleDevice[]>([])
 const connected = ref(false)
@@ -17,6 +18,7 @@ const CHARACTERISTIC_UUID = '51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B'
 
 const sendData = ref('')
 const recvData = ref('')
+const rustTest = ref(false)
 
 
 const notifyData = ref('')
@@ -28,17 +30,33 @@ async function subscribe() {
     subscribeString(CHARACTERISTIC_UUID, (data: string) => notifyData.value = data)
   }
 }
+
+async function test() {
+  try {
+    let resp = await invoke<boolean>('test')
+    rustTest.value = resp
+  } catch (e) {
+    console.error(e)
+  }
+}
 </script>
 
 <template>
   <div class="container">
     <h1>Welcome to the blec plugin!</h1>
-    <button :onclick="() => startScan((dev: BleDevice[]) => devices = dev)" style="margin-bottom: 5px;">Start
+    <button :onclick="() => startScan((dev: BleDevice[]) => devices = dev, 5000)" style="margin-bottom: 5px;">Start
       Scan</button>
     <button :onclick="stopScan" style="margin-bottom: 5px;">Stop Scan</button>
     <div v-if="connected">
       <p>Connected</p>
-      <button :onclick="disconnect" style="margin-bottom: 5px;">Disconnect</button>
+      <div class="row">
+        <button :onclick="disconnect" style="margin-bottom: 5px;">Disconnect</button>
+      </div>
+      <div>
+        {{ rustTest ? 'Rust test successful' : '' }}
+        <br />
+        <button :onclick="test" style="margin-bottom: 5px;">Test Rust communication</button>
+      </div>
       <div class="row">
         <input v-model="sendData" placeholder="Send data" />
         <button class="ml" :onclick="() => sendString(CHARACTERISTIC_UUID, sendData)">Send</button>

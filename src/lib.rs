@@ -1,12 +1,10 @@
-use std::collections::btree_map::Keys;
-
 use futures::StreamExt;
-use handler::BleHandler;
+use handler::Handler;
 use once_cell::sync::OnceCell;
 use tauri::{
     async_runtime,
     plugin::{Builder, TauriPlugin},
-    Manager, Runtime, Wry,
+    Wry,
 };
 use tokio::sync::Mutex;
 
@@ -17,11 +15,13 @@ mod error;
 mod handler;
 mod models;
 
-static HANDLER: OnceCell<Mutex<BleHandler>> = OnceCell::new();
+static HANDLER: OnceCell<Mutex<Handler>> = OnceCell::new();
 
 /// Initializes the plugin.
+/// # Panics
+/// Panics if the handler cannot be initialized.
 pub fn init() -> TauriPlugin<Wry> {
-    let handler = async_runtime::block_on(BleHandler::new()).expect("failed to initialize handler");
+    let handler = async_runtime::block_on(Handler::new()).expect("failed to initialize handler");
     let _ = HANDLER.set(Mutex::new(handler));
 
     #[allow(unused)]
@@ -36,7 +36,10 @@ pub fn init() -> TauriPlugin<Wry> {
         .build()
 }
 
-pub fn get_handler() -> error::Result<&'static Mutex<BleHandler>> {
+/// Returns the BLE handler to use blec from rust.
+/// # Errors
+/// Returns an error if the handler is not initialized.
+pub fn get_handler() -> error::Result<&'static Mutex<Handler>> {
     let handler = HANDLER.get().ok_or(error::Error::HandlerNotInitialized)?;
     Ok(handler)
 }

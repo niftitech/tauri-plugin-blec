@@ -70,7 +70,7 @@ pub(crate) async fn connection_state<R: Runtime>(
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     handler.lock().await.set_connection_update_channel(tx);
     update
-        .send(handler.lock().await.is_connected().await)
+        .send(handler.lock().await.is_connected())
         .expect("failed to send connection state");
     async_runtime::spawn(async move {
         while let Some(connected) = rx.recv().await {

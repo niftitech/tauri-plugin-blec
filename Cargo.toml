@@ -1,8 +1,8 @@
 [package]
 name = "tauri-plugin-blec"
 version = "0.1.0"
-authors = ["You"]
-description = ""
+authors = ["Manuel Philipp"]
+description = "BLE-Client plugin for Tauri"
 edition = "2021"
 rust-version = "1.77.2"
 exclude = ["/examples", "/webview-dist", "/webview-src", "/node_modules"]
@@ -11,7 +11,7 @@ links = "tauri-plugin-blec"
 [dependencies]
 tauri = { version = "2.0.6", features = ["wry"] }
 serde = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 btleplug = {version="0.11.6",features=["serde"]}
 tokio = "1.40.0"
 uuid = "1.11.0"

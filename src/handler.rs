@@ -4,7 +4,7 @@ use btleplug::api::CentralEvent;
 use btleplug::api::{
     Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
 };
-use futures::{FutureExt, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use std::time::Duration;
 use tauri::async_runtime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::sleep;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]
@@ -22,12 +22,13 @@ use btleplug::api::{Central as _, Manager as _, Peripheral as _};
 #[cfg(not(target_os = "android"))]
 use btleplug::platform::{Adapter, Manager, Peripheral};
 
+type ListenerCallback = Arc<dyn Fn(&[u8]) + Send + Sync>;
 struct Listener {
     uuid: Uuid,
-    callback: Arc<dyn Fn(&[u8]) + Send + Sync>,
+    callback: ListenerCallback,
 }
 
-pub struct BleHandler {
+pub struct Handler {
     connected: Option<Peripheral>,
     characs: Vec<Characteristic>,
     devices: Arc<Mutex<HashMap<String, Peripheral>>>,
@@ -45,7 +46,7 @@ async fn get_central() -> Result<Adapter, Error> {
     Ok(central)
 }
 
-impl BleHandler {
+impl Handler {
     pub async fn new() -> Result<Self, Error> {
         let central = get_central().await?;
         Ok(Self {
@@ -60,7 +61,7 @@ impl BleHandler {
         })
     }
 
-    pub async fn is_connected(&self) -> bool {
+    pub fn is_connected(&self) -> bool {
         self.connected.is_some()
     }
 
@@ -168,11 +169,10 @@ impl BleHandler {
             })
             .await?;
         let mut self_devices = self.devices.clone();
-        let mut connected = self.connected.clone();
         let adapter = self.adapter.clone();
         tokio::task::spawn(async move {
             self_devices.lock().await.clear();
-            let loops = (timeout as f64 / 200.0).round() as u64;
+            let loops = timeout / 200;
             let mut devices;
             for _ in 0..loops {
                 sleep(Duration::from_millis(200)).await;
@@ -185,7 +185,6 @@ impl BleHandler {
                     if let Some(tx) = &tx {
                         tx.send(devices.clone())
                             .await
-                            .map_err(|e| Error::SendingDevices(e))
                             .expect("failed to send devices");
                     }
                 }
@@ -224,7 +223,7 @@ impl BleHandler {
     pub async fn send_data(&mut self, c: Uuid, data: &[u8]) -> Result<(), Error> {
         let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = self.get_charac(c)?;
-        dev.write(charac, &data, WriteType::WithoutResponse).await?;
+        dev.write(charac, data, WriteType::WithoutResponse).await?;
         Ok(())
     }
 
@@ -271,7 +270,7 @@ impl BleHandler {
         Ok(events)
     }
 
-    pub async fn handle_event(&mut self, event: CentralEvent) -> Result<(), Error> {
+    pub(crate) async fn handle_event(&mut self, event: CentralEvent) -> Result<(), Error> {
         // logi!("handling event {event:?}");
         match event {
             CentralEvent::DeviceDisconnected(_) => self.disconnect().await,
