@@ -38,6 +38,19 @@ tauri::Builder::default()
     .expect("error while running tauri application");
 ```
 
+### IOS Setup
+Add an entry to the info.plist of your app:
+```xml
+<key>NsBluetoothAlwaysUsageDescription</key>
+<string>The App uses Bluetooth to communicate with BLE devices</string>
+```
+
+Add the CoreBluetooth Framework in your xcode procjet:
+- open with `tauri ios dev --open`
+- click on your project to open settings
+- Add Framework under General -> Frameworks,Libraries and Embedded Content
+
+
 ## Usage in Frontend
 See `examples/plugin-blec-example` for a full working example that scans for devices, connects and sends/receives data.
 In order to use it run `examples/test-server` on another device and connect to that server.
