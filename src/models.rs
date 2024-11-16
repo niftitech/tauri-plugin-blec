@@ -44,8 +44,12 @@ impl BleDevice {
     pub async fn from_peripheral<P: btleplug::api::Peripheral>(
         peripheral: &P,
     ) -> Result<Self, error::Error> {
+        #[cfg(target_vendor = "apple")]
+        let address = peripheral.id().to_string();
+        #[cfg(not(target_vendor = "apple"))]
+        let address = peripheral.address().to_string();
         Ok(Self {
-            address: peripheral.address().to_string(),
+            address,
             name: peripheral
                 .properties()
                 .await?

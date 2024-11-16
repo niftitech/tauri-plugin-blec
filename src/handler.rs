@@ -12,7 +12,7 @@ use std::time::Duration;
 use tauri::async_runtime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::sleep;
-use tracing::{debug, error, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]
@@ -242,7 +242,7 @@ impl Handler {
                     devices.push(dev);
                 }
                 Err(e) => {
-                    error!("Failed to add device: {e}");
+                    warn!("Failed to add device: {e}");
                 }
             }
         }

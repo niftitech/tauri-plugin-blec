@@ -44,7 +44,7 @@ async function test() {
 <template>
   <div class="container">
     <h1>Welcome to the blec plugin!</h1>
-    <button :onclick="() => startScan((dev: BleDevice[]) => devices = dev, 5000)" style="margin-bottom: 5px;">Start
+    <button :onclick="() => startScan((dev: BleDevice[]) => devices = dev, 10000)" style="margin-bottom: 5px;">Start
       Scan</button>
     <button :onclick="stopScan" style="margin-bottom: 5px;">Stop Scan</button>
     <div v-if="connected">
