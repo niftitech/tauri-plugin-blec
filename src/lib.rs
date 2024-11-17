@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use handler::Handler;
+pub use handler::Handler;
 use once_cell::sync::OnceCell;
 use tauri::{
     async_runtime,
