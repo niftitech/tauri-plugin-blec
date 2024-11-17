@@ -37,6 +37,7 @@ pub struct Handler {
     notify_listeners: Arc<Mutex<Vec<Listener>>>,
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
     connection_update_channel: Option<mpsc::Sender<bool>>,
+    scan_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 async fn get_central() -> Result<Adapter, Error> {
@@ -58,6 +59,7 @@ impl Handler {
             notify_listeners: Arc::new(Mutex::new(vec![])),
             on_disconnect: None,
             connection_update_channel: None,
+            scan_task: None,
         })
     }
 
@@ -178,20 +180,44 @@ impl Handler {
             callback();
         }
         if let Some(tx) = &self.connection_update_channel {
-            tx.send(false)
-                .await
-                .expect("failed to send connection update");
+            tx.send(false).await?;
         }
         self.characs.clear();
         Ok(())
     }
 
     /// Scans for [timeout] milliseconds and periodically sends discovered devices
+    /// to the given channel.
+    /// A task is spawned to handle the scan and send the devices, so the function
+    /// returns immediately.
+    /// # Errors
+    /// Returns an error if starting the scan fails
+    /// # Panics
+    /// Panics if there is an error getting devices from the adapter
+    /// # Example
+    /// ```no_run
+    /// use tauri::async_runtime;
+    /// use tokio::sync::mpsc;
+    /// async_runtime::block_on(async {
+    ///     let handler = tauri_plugin_blec::get_handler().unwrap();
+    ///     let (tx, mut rx) = mpsc::channel(1);
+    ///     handler.lock().await.discover(Some(tx),1000).await.unwrap();
+    ///     while let Some(devices) = rx.recv().await {
+    ///         println!("Discovered {devices:?}");
+    ///     }
+    /// });
+    /// ```
     pub async fn discover(
-        &self,
+        &mut self,
         tx: Option<mpsc::Sender<Vec<BleDevice>>>,
         timeout: u64,
     ) -> Result<(), Error> {
+        // stop any ongoing scan
+        if let Some(handle) = self.scan_task.take() {
+            handle.abort();
+            self.adapter.stop_scan().await?;
+        }
+        // start a new scan
         self.adapter
             .start_scan(ScanFilter {
                 // services: vec![*SERVICE_UUID],
@@ -200,7 +226,7 @@ impl Handler {
             .await?;
         let mut self_devices = self.devices.clone();
         let adapter = self.adapter.clone();
-        tokio::task::spawn(async move {
+        self.scan_task = Some(tokio::task::spawn(async move {
             self_devices.lock().await.clear();
             let loops = timeout / 200;
             let mut devices;
@@ -220,13 +246,19 @@ impl Handler {
                 }
             }
             adapter.stop_scan().await.expect("failed to stop scan");
-        });
+        }));
         Ok(())
     }
 
     /// Stops scanning for devices
-    pub async fn stop_scan(&self) -> Result<(), Error> {
+    /// # Errors
+    /// Returns an error if stopping the scan fails
+    pub async fn stop_scan(&mut self) -> Result<(), Error> {
         self.adapter.stop_scan().await?;
+        if let Some(handle) = self.scan_task.take() {
+            handle.abort();
+            self.adapter.stop_scan().await?;
+        }
         Ok(())
     }
 

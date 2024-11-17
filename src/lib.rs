@@ -1,5 +1,4 @@
 use futures::StreamExt;
-pub use handler::Handler;
 use once_cell::sync::OnceCell;
 use tauri::{
     async_runtime,
@@ -14,6 +13,9 @@ mod commands;
 mod error;
 mod handler;
 mod models;
+
+pub use error::Error;
+pub use handler::Handler;
 
 static HANDLER: OnceCell<Mutex<Handler>> = OnceCell::new();
 
