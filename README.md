@@ -41,7 +41,7 @@ tauri::Builder::default()
 ### IOS Setup
 Add an entry to the info.plist of your app:
 ```xml
-<key>NsBluetoothAlwaysUsageDescription</key>
+<key>NSBluetoothAlwaysUsageDescription</key>
 <string>The App uses Bluetooth to communicate with BLE devices</string>
 ```
 
