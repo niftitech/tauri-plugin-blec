@@ -52,7 +52,7 @@ export async function disconnect() {
   * @param address - The address of the device to connect to
   * @param onDisconnect - A function that will be called when the device disconnects
 */
-export async function connect(address: string, onDisconnect: () => void | null) {
+export async function connect(address: string, onDisconnect: (() => void) | null) {
   console.log('connect', address)
   let disconnectChannel = new Channel()
   if (onDisconnect) {
