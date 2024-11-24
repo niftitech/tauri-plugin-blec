@@ -97,6 +97,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
         device.services(invoke)
     }
 
+    @InvokeArg
     class NotifyParams () {
         var address: String = ""
         var channel: Channel? = null
@@ -114,6 +115,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
         invoke.resolve()
     }
 
+    @InvokeArg
     class WriteParams() {
         val address: String = ""
         val characteristic: UUID? = null
@@ -131,6 +133,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
         device.write(invoke)
     }
 
+    @InvokeArg
     class ReadParams(){
         val address: String = ""
         val characteristic: UUID? = null
