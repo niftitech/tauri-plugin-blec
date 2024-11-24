@@ -83,6 +83,27 @@ pub(crate) async fn connection_state<R: Runtime>(
 }
 
 #[command]
+pub(crate) async fn scanning_state<R: Runtime>(
+    _app: AppHandle<R>,
+    update: Channel<bool>,
+) -> Result<()> {
+    let handler = get_handler()?;
+    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    handler.lock().await.set_scanning_update_channel(tx);
+    update
+        .send(handler.lock().await.is_scanning())
+        .expect("failed to send scanning state");
+    async_runtime::spawn(async move {
+        while let Some(scanning) = rx.recv().await {
+            update
+                .send(scanning)
+                .expect("failed to send scanning state to the front-end");
+        }
+    });
+    Ok(())
+}
+
+#[command]
 pub(crate) async fn send<R: Runtime>(
     _app: AppHandle<R>,
     characteristic: Uuid,
@@ -197,6 +218,7 @@ pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
         recv_string,
         subscribe,
         subscribe_string,
-        unsubscribe
+        unsubscribe,
+        scanning_state
     ]
 }

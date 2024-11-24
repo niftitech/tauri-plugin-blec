@@ -365,6 +365,16 @@
           "const": "deny-scan"
         },
         {
+          "description": "Enables the scanning_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-scanning-state"
+        },
+        {
+          "description": "Denies the scanning_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-scanning-state"
+        },
+        {
           "description": "Enables the send command without any pre-configured scope.",
           "type": "string",
           "const": "allow-send"

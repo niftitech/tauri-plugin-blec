@@ -1,16 +1,23 @@
 <script setup lang="ts">
 // This starter template is using Vue 3 <script setup> SFCs
 // Check out https://vuejs.org/api/sfc-script-setup.html#script-setup
-import { BleDevice, getConnectionUpdates, startScan, sendString, readString, unsubscribe, subscribeString, stopScan, connect, disconnect } from '@mnlphlp/plugin-blec'
+import { BleDevice, getConnectionUpdates, startScan, sendString, readString, unsubscribe, subscribeString, stopScan, connect, disconnect, getScanningUpdates } from '@mnlphlp/plugin-blec'
 import { onMounted, ref } from 'vue';
 import BleDev from './components/BleDev.vue'
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core'
+import { BarLoader } from '@saeris/vue-spinners'
+
 
 const devices = ref<BleDevice[]>([])
 const connected = ref(false)
+const scanning = ref(false)
 
 onMounted(async () => {
   await getConnectionUpdates((state) => connected.value = state)
+  await getScanningUpdates((state) => {
+    console.log('Scanning:', state)
+    scanning.value = state
+  })
 })
 
 // const SERVICE_UUID = 'A07498CA-AD5B-474E-940D-16F1FBE7E8CD'
@@ -44,9 +51,19 @@ async function test() {
 <template>
   <div class="container">
     <h1>Welcome to the blec plugin!</h1>
-    <button :onclick="() => startScan((dev: BleDevice[]) => devices = dev, 10000)" style="margin-bottom: 5px;">Start
-      Scan</button>
-    <button :onclick="stopScan" style="margin-bottom: 5px;">Stop Scan</button>
+
+    <button v-if="scanning" :onclick="stopScan" style="margin-bottom: 5px;">
+      Stop Scan
+      <div class="lds-ring">
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+    </button>
+    <button v-else :onclick="() => startScan((dev: BleDevice[]) => devices = dev, 10000)" style="margin-bottom: 5px;">
+      Start Scan
+    </button>
     <div v-if="connected">
       <p>Connected</p>
       <div class="row">
@@ -71,7 +88,8 @@ async function test() {
       </div>
     </div>
     <div v-else v-for="device in devices" class="row">
-      <BleDev :key="device.address" :device="device" :onclick="() => connect(device.address, () => console.log('disconnected'))" />
+      <BleDev :key="device.address" :device="device"
+        :onclick="() => connect(device.address, () => console.log('disconnected'))" />
     </div>
   </div>
 </template>
@@ -182,24 +200,73 @@ button {
   margin-right: 5px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+:root {
+  color: #f6f6f6;
+  background-color: #2f2f2f;
+}
+
+a:hover {
+  color: #24c8db;
+}
+
+input,
+button {
+  color: #ffffff;
+  background-color: #0f0f0f98;
+}
+
+button:active {
+  background-color: #0f0f0f69;
+}
+
+
+.lds-ring,
+.lds-ring div {
+  box-sizing: border-box;
+}
+
+.lds-ring {
+  display: inline-block;
+  position: relative;
+  width: 15px;
+  height: 15px;
+}
+
+.lds-ring div {
+  box-sizing: border-box;
+  display: block;
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: 2px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  border-color: currentColor transparent transparent transparent;
+}
+
+.lds-ring div:nth-child(1) {
+  animation-delay: -0.45s;
+}
+
+.lds-ring div:nth-child(2) {
+  animation-delay: -0.3s;
+}
+
+.lds-ring div:nth-child(3) {
+  animation-delay: -0.15s;
+}
+
+@keyframes lds-ring {
+  0% {
+    transform: rotate(0deg);
   }
 
-  a:hover {
-    color: #24c8db;
+  100% {
+    transform: rotate(360deg);
   }
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
 
-  button:active {
-    background-color: #0f0f0f69;
-  }
+
 }
 </style>

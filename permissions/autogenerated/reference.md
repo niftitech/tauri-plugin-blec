@@ -14,6 +14,7 @@ Default permissions for the plugin
 - `allow-subscribe`
 - `allow-subscribe-string`
 - `allow-unsubscribe`
+- `allow-scanning-state`
 
 ## Permission Table
 
@@ -202,6 +203,32 @@ Enables the scan command without any pre-configured scope.
 <td>
 
 Denies the scan command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:allow-scanning-state`
+
+</td>
+<td>
+
+Enables the scanning_state command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`blec:deny-scanning-state`
+
+</td>
+<td>
+
+Denies the scanning_state command without any pre-configured scope.
 
 </td>
 </tr>

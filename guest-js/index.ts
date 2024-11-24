@@ -41,6 +41,15 @@ export async function getConnectionUpdates(handler: (connected: boolean) => void
 }
 
 /**
+ * Register a handler to receive updates when the scanning state changes
+ */
+export async function getScanningUpdates(handler: (scanning: boolean) => void) {
+  let scanning_chan = new Channel<boolean>()
+  scanning_chan.onmessage = handler
+  await invoke('plugin:blec|scanning_state', { update: scanning_chan })
+}
+
+/**
   * Disconnect from the currently connected device
 */
 export async function disconnect() {

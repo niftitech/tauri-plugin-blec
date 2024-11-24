@@ -37,6 +37,7 @@ pub struct Handler {
     notify_listeners: Arc<Mutex<Vec<Listener>>>,
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
     connection_update_channel: Option<mpsc::Sender<bool>>,
+    scan_update_channel: Option<mpsc::Sender<bool>>,
     scan_task: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -60,12 +61,40 @@ impl Handler {
             on_disconnect: None,
             connection_update_channel: None,
             scan_task: None,
+            scan_update_channel: None,
         })
     }
 
     /// Returns true if a device is connected
     pub fn is_connected(&self) -> bool {
         self.connected.is_some()
+    }
+
+    /// Returns true if the adapter is scanning
+    pub fn is_scanning(&self) -> bool {
+        if let Some(handle) = &self.scan_task {
+            !handle.is_finished()
+        } else {
+            false
+        }
+    }
+
+    /// Takes a sender that will be used to send changes in the scanning status
+    /// # Example
+    /// ```no_run
+    /// use tauri::async_runtime;
+    /// use tokio::sync::mpsc;
+    /// async_runtime::block_on(async {
+    ///     let handler = tauri_plugin_blec::get_handler().unwrap();
+    ///     let (tx, mut rx) = mpsc::channel(1);
+    ///     handler.lock().await.set_scanning_update_channel(tx);
+    ///     while let Some(scanning) = rx.recv().await {
+    ///         println!("Scanning: {scanning}");
+    ///     }
+    /// });
+    /// ```
+    pub fn set_scanning_update_channel(&mut self, tx: mpsc::Sender<bool>) {
+        self.scan_update_channel = Some(tx);
     }
 
     /// Takes a sender that will be used to send changes in the connection status
@@ -224,8 +253,12 @@ impl Handler {
                 services: vec![],
             })
             .await?;
+        if let Some(tx) = &self.scan_update_channel {
+            tx.send(true).await?;
+        }
         let mut self_devices = self.devices.clone();
         let adapter = self.adapter.clone();
+        let scan_update_channel = self.scan_update_channel.clone();
         self.scan_task = Some(tokio::task::spawn(async move {
             self_devices.lock().await.clear();
             let loops = timeout / 200;
@@ -246,6 +279,9 @@ impl Handler {
                 }
             }
             adapter.stop_scan().await.expect("failed to stop scan");
+            if let Some(tx) = &scan_update_channel {
+                tx.send(false).await.expect("failed to send scan update");
+            }
         }));
         Ok(())
     }
@@ -257,7 +293,9 @@ impl Handler {
         self.adapter.stop_scan().await?;
         if let Some(handle) = self.scan_task.take() {
             handle.abort();
-            self.adapter.stop_scan().await?;
+        }
+        if let Some(tx) = &self.scan_update_channel {
+            tx.send(false).await?;
         }
         Ok(())
     }

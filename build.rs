@@ -11,6 +11,7 @@ const COMMANDS: &[&str] = &[
     "subscribe",
     "subscribe_string",
     "unsubscribe",
+    "scanning_state",
 ];
 
 fn main() {
