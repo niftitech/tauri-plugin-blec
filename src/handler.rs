@@ -131,7 +131,7 @@ impl Handler {
     pub async fn connect(
         &mut self,
         address: String,
-        on_disconnect: Option<impl Fn() + Send + 'static>,
+        on_disconnect: Option<Box<dyn Fn() + Send>>,
     ) -> Result<(), Error> {
         if self.devices.lock().await.len() == 0 {
             self.discover(None, 1000).await?;
@@ -140,7 +140,7 @@ impl Handler {
         self.connect_device(address).await?;
         // set callback to run on disconnect
         if let Some(cb) = on_disconnect {
-            self.on_disconnect = Some(Mutex::new(Box::new(cb)));
+            self.on_disconnect = Some(Mutex::new(cb));
         }
         // discover service/characteristics
         self.connect_services().await?;

@@ -49,7 +49,9 @@ pub(crate) async fn connect<R: Runtime>(
             .send(())
             .expect("failed to send disconnect event to the front-end");
     };
-    handler.connect(address, Some(disconnct_handler)).await?;
+    handler
+        .connect(address, Some(Box::new(disconnct_handler)))
+        .await?;
     Ok(())
 }
 
