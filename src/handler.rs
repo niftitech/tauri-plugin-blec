@@ -154,8 +154,12 @@ impl Handler {
 
     async fn connect_services(&mut self) -> Result<(), Error> {
         let device = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
-        device.discover_services().await?;
-        let services = device.services();
+        let mut services = device.services();
+        if services.is_empty() {
+            device.discover_services().await?;
+            services = device.services();
+        }
+        dbg!(&services);
         for s in services {
             for c in &s.characteristics {
                 self.characs.push(c.clone());
@@ -458,9 +462,17 @@ impl Handler {
 
     pub(crate) async fn handle_event(&mut self, event: CentralEvent) -> Result<(), Error> {
         match event {
-            CentralEvent::DeviceDisconnected(_) => self.disconnect().await,
-            _ => Ok(()),
+            CentralEvent::DeviceDisconnected(peripheral_id) => {
+                if let Some(dev) = self.connected.as_ref() {
+                    if peripheral_id == dev.id() {
+                        tracing::info!("Received disconnect event for currently connected device");
+                        self.disconnect().await?;
+                    }
+                }
+            }
+            _event => {}
         }
+        Ok(())
     }
 
     /// Returns the connected device
