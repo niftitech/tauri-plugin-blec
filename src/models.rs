@@ -21,7 +21,6 @@ pub struct PingResponse {
 pub struct BleDevice {
     pub address: String,
     pub name: String,
-    pub services: Vec<Service>,
     pub is_connected: bool,
 }
 
@@ -59,16 +58,9 @@ impl BleDevice {
             .unwrap_or_default()
             .local_name
             .unwrap_or_else(|| peripheral.id().to_string());
-        let mut services = peripheral.services();
-        if services.is_empty() {
-            peripheral.discover_services().await?;
-            services = peripheral.services();
-        }
-        let services = services.iter().map(Service::from).collect::<Vec<_>>();
         Ok(Self {
             address,
             name,
-            services,
             is_connected: peripheral.is_connected().await?,
         })
     }

@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::models::{fmt_addr, BleDevice};
+use crate::models::{fmt_addr, BleDevice, Service};
 use btleplug::api::CentralEvent;
 use btleplug::api::{
     Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
@@ -134,7 +134,7 @@ impl Handler {
         on_disconnect: Option<Box<dyn Fn() + Send>>,
     ) -> Result<(), Error> {
         if self.devices.lock().await.len() == 0 {
-            self.discover(None, 1000).await?;
+            self.discover(None, 1000, vec![]).await?;
         }
         // connect to the given address
         self.connect_device(address).await?;
@@ -219,6 +219,11 @@ impl Handler {
     /// to the given channel.
     /// A task is spawned to handle the scan and send the devices, so the function
     /// returns immediately.
+    ///
+    /// A list of Service UUIDs can be provided to filter the devices discovered.
+    /// Devices that provide at least one of the services in the list will be included.
+    /// An empty list will include all devices.
+    ///
     /// # Errors
     /// Returns an error if starting the scan fails
     /// # Panics
@@ -240,6 +245,7 @@ impl Handler {
         &mut self,
         tx: Option<mpsc::Sender<Vec<BleDevice>>>,
         timeout: u64,
+        filter: Vec<Uuid>,
     ) -> Result<(), Error> {
         // stop any ongoing scan
         if let Some(handle) = self.scan_task.take() {
@@ -248,10 +254,7 @@ impl Handler {
         }
         // start a new scan
         self.adapter
-            .start_scan(ScanFilter {
-                // services: vec![*SERVICE_UUID],
-                services: vec![],
-            })
+            .start_scan(ScanFilter { services: filter })
             .await?;
         if let Some(tx) = &self.scan_update_channel {
             tx.send(true).await?;
@@ -284,6 +287,39 @@ impl Handler {
             }
         }));
         Ok(())
+    }
+
+    /// Discover provided services and charecteristics
+    /// If the device is not connected, a connection is made in order to discover the services and characteristics
+    /// After the discovery is done, the device is disconnected
+    /// If the devices was already connected, it will stay connected
+    pub async fn discover_services(&self, address: &str) -> Result<Vec<Service>, Error> {
+        let mut already_connected = self
+            .connected
+            .as_ref()
+            .is_some_and(|dev| address == fmt_addr(dev.address()));
+        let device = if already_connected {
+            self.connected.as_ref().expect("Connection exists").clone()
+        } else {
+            let devices = self.devices.lock().await;
+            let device = devices
+                .get(address)
+                .ok_or(Error::UnknownPeripheral(address.to_string()))?;
+            if device.is_connected().await? {
+                already_connected = true;
+            } else {
+                device.connect().await?;
+            }
+            device.clone()
+        };
+        if device.services().is_empty() {
+            device.discover_services().await?;
+        }
+        let services = device.services().iter().map(Service::from).collect();
+        if !already_connected {
+            device.disconnect().await?;
+        }
+        Ok(services)
     }
 
     /// Stops scanning for devices

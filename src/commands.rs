@@ -24,7 +24,11 @@ pub(crate) async fn scan<R: Runtime>(
                 .expect("failed to send device to the front-end");
         }
     });
-    handler.lock().await.discover(Some(tx), timeout).await?;
+    handler
+        .lock()
+        .await
+        .discover(Some(tx), timeout, vec![])
+        .await?;
     Ok(())
 }
 
