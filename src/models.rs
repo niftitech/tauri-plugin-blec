@@ -149,3 +149,20 @@ pub fn fmt_addr(addr: BDAddr) -> String {
         a[0], a[1], a[2], a[3], a[4], a[5]
     )
 }
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum WriteType {
+    /// aka request.
+    WithResponse,
+    /// aka command.
+    WithoutResponse,
+}
+
+impl From<WriteType> for btleplug::api::WriteType {
+    fn from(write_type: WriteType) -> Self {
+        match write_type {
+            WriteType::WithResponse => btleplug::api::WriteType::WithResponse,
+            WriteType::WithoutResponse => btleplug::api::WriteType::WithoutResponse,
+        }
+    }
+}

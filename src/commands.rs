@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::error::Result;
 use crate::get_handler;
-use crate::models::BleDevice;
+use crate::models::{BleDevice, WriteType};
 
 #[command]
 pub(crate) async fn scan<R: Runtime>(
@@ -110,10 +110,11 @@ pub(crate) async fn send<R: Runtime>(
     _app: AppHandle<R>,
     characteristic: Uuid,
     data: Vec<u8>,
+    write_type: WriteType,
 ) -> Result<()> {
     info!("Sending data: {data:?}");
     let handler = get_handler()?;
-    handler.send_data(characteristic, &data).await?;
+    handler.send_data(characteristic, &data, write_type).await?;
     Ok(())
 }
 
@@ -129,9 +130,10 @@ pub(crate) async fn send_string<R: Runtime>(
     app: AppHandle<R>,
     characteristic: Uuid,
     data: String,
+    write_type: WriteType,
 ) -> Result<()> {
     let data = data.as_bytes().to_vec();
-    send(app, characteristic, data).await
+    send(app, characteristic, data, write_type).await
 }
 
 #[command]

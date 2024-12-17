@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::models::{fmt_addr, BleDevice, Service};
+use crate::models::{self, fmt_addr, BleDevice, Service};
 use btleplug::api::CentralEvent;
 use btleplug::api::{
     Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
@@ -160,6 +160,7 @@ impl Handler {
         // connect to the given address
         if let Err(e) = self.connect_device(address).await {
             *self.connected_dev.lock().await = None;
+            let _ = self.connected_tx.send(false);
             error!("Failed to connect device: {e}");
             return Err(e);
         }
@@ -491,12 +492,17 @@ impl Handler {
     ///     let response = handler.lock().await.send_data(CHARACTERISTIC_UUID,&data).await.unwrap();
     /// });
     /// ```
-    pub async fn send_data(&self, c: Uuid, data: &[u8]) -> Result<(), Error> {
+    pub async fn send_data(
+        &self,
+        c: Uuid,
+        data: &[u8],
+        write_type: models::WriteType,
+    ) -> Result<(), Error> {
         let dev = self.connected_dev.lock().await;
         let dev = dev.as_ref().ok_or(Error::NoDeviceConnected)?;
         let state = self.state.lock().await;
         let charac = state.get_charac(c)?;
-        dev.write(charac, data, WriteType::WithoutResponse).await?;
+        dev.write(charac, data, write_type.into()).await?;
         Ok(())
     }
 
@@ -615,10 +621,12 @@ impl Handler {
             } else {
                 // event not for currently connected device, ignore
                 debug!("Unexpected connect event for device {peripheral_id}, connected device is {connected_device}");
-                return;
             }
+        } else {
+            debug!(
+                "connect event for device {peripheral_id} received without waiting for connection"
+            );
         }
-        debug!("connect event for device {peripheral_id} received without waiting for connection");
     }
 }
 
