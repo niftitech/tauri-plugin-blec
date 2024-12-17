@@ -13,7 +13,7 @@ use std::time::Duration;
 use tauri::async_runtime;
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::time::sleep;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]
@@ -156,9 +156,13 @@ impl Handler {
             self.discover(None, 1000, vec![]).await?;
         }
         // cancel any running discovery
-        self.stop_scan().await?;
+        let _ = self.stop_scan().await;
         // connect to the given address
-        self.connect_device(address).await?;
+        if let Err(e) = self.connect_device(address).await {
+            *self.connected_dev.lock().await = None;
+            error!("Failed to connect device: {e}");
+            return Err(e);
+        }
         let mut state = self.state.lock().await;
         // set callback to run on disconnect
         if let Some(cb) = on_disconnect {
@@ -218,11 +222,7 @@ impl Handler {
                 "connected_rx is true without device being connected, this is a bug"
             );
             debug!("Connecting to device");
-            if let Err(e) = device.connect().await {
-                warn!("Failed to connect to device: {e}");
-                *self.connected_dev.lock().await = None;
-                return Err(Error::ConnectionFailed);
-            }
+            device.connect().await?;
             // wait for the actual connection to be established
             connected_rx
                 .changed()
@@ -231,7 +231,6 @@ impl Handler {
             debug!("Connecting done");
             if !*self.connected_rx.borrow() {
                 // still not connected
-                *self.connected_dev.lock().await = None;
                 return Err(Error::ConnectionFailed);
             }
         }
