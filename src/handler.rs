@@ -30,7 +30,6 @@ struct Listener {
 }
 
 struct HandlerState {
-    connected: Option<Peripheral>,
     characs: Vec<Characteristic>,
     listen_handle: Option<async_runtime::JoinHandle<()>>,
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
@@ -53,6 +52,7 @@ pub struct Handler {
     connected_rx: watch::Receiver<bool>,
     connected_tx: watch::Sender<bool>,
     state: Mutex<HandlerState>,
+    connected_dev: Mutex<Option<Peripheral>>,
 }
 
 async fn get_central() -> Result<Adapter, Error> {
@@ -72,6 +72,7 @@ impl Handler {
             notify_listeners: Arc::new(Mutex::new(vec![])),
             connected_rx,
             connected_tx,
+            connected_dev: Mutex::new(None),
             state: Mutex::new(HandlerState {
                 on_disconnect: None,
                 connection_update_channel: None,
@@ -79,7 +80,6 @@ impl Handler {
                 scan_update_channel: None,
                 listen_handle: None,
                 characs: vec![],
-                connected: None,
             }),
         })
     }
@@ -155,6 +155,8 @@ impl Handler {
         if self.devices.lock().await.len() == 0 {
             self.discover(None, 1000, vec![]).await?;
         }
+        // cancel any running discovery
+        self.stop_scan().await?;
         // connect to the given address
         self.connect_device(address).await?;
         let mut state = self.state.lock().await;
@@ -166,14 +168,15 @@ impl Handler {
         self.connect_services(&mut state).await?;
         // start background task for notifications
         state.listen_handle = Some(async_runtime::spawn(listen_notify(
-            state.connected.clone(),
+            self.connected_dev.lock().await.clone(),
             self.notify_listeners.clone(),
         )));
         Ok(())
     }
 
     async fn connect_services(&self, state: &mut HandlerState) -> Result<(), Error> {
-        let device = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+        let device = self.connected_dev.lock().await;
+        let device = device.as_ref().ok_or(Error::NoDeviceConnected)?;
         let mut services = device.services();
         if services.is_empty() {
             device.discover_services().await?;
@@ -189,10 +192,13 @@ impl Handler {
 
     async fn connect_device(&self, address: &str) -> Result<(), Error> {
         debug!("connecting to {address}",);
-        let mut state = self.state.lock().await;
-        if let Some(dev) = state.connected.as_ref() {
-            if address == fmt_addr(dev.address()) {
-                return Err(Error::AlreadyConnected);
+        {
+            // scope is important to not lock device while waiting for connect event
+            let dev = self.connected_dev.lock().await;
+            if let Some(dev) = dev.as_ref() {
+                if address == fmt_addr(dev.address()) {
+                    return Err(Error::AlreadyConnected);
+                }
             }
         }
         let mut connected_rx = self.connected_rx.clone();
@@ -200,26 +206,37 @@ impl Handler {
         let device = devices
             .get(address)
             .ok_or(Error::UnknownPeripheral(address.to_string()))?;
-        state.connected = Some(device.clone());
-        if !device.is_connected().await? {
+        *self.connected_dev.lock().await = Some(device.clone());
+        if device.is_connected().await? {
+            debug!("Device already connected");
+            self.connected_tx
+                .send(true)
+                .expect("failed to send connected update");
+        } else {
             assert!(
                 !(*connected_rx.borrow_and_update()),
                 "connected_rx is true without device being connected, this is a bug"
             );
             debug!("Connecting to device");
-            device.connect().await?;
+            if let Err(e) = device.connect().await {
+                warn!("Failed to connect to device: {e}");
+                *self.connected_dev.lock().await = None;
+                return Err(Error::ConnectionFailed);
+            }
+            // wait for the actual connection to be established
+            connected_rx
+                .changed()
+                .await
+                .expect("failed to wait for connection event");
             debug!("Connecting done");
-        }
-        // wait for the actual connection to be established
-        connected_rx
-            .changed()
-            .await
-            .expect("failed to wait for connection event");
-        if !*self.connected_rx.borrow() {
-            // still not connected
-            return Err(Error::ConnectionFailed);
+            if !*self.connected_rx.borrow() {
+                // still not connected
+                *self.connected_dev.lock().await = None;
+                return Err(Error::ConnectionFailed);
+            }
         }
 
+        let state = self.state.lock().await;
         if let Some(tx) = &state.connection_update_channel {
             tx.send(true)
                 .await
@@ -237,26 +254,29 @@ impl Handler {
     pub async fn disconnect(&self) -> Result<(), Error> {
         debug!("disconnect triggered by user");
         let mut connected_rx = self.connected_rx.clone();
-        if let Some(dev) = self.state.lock().await.connected.as_mut() {
-            if let Ok(true) = dev.is_connected().await {
-                assert!(
-                    !(*connected_rx.borrow_and_update()),
-                    "connected_rx is false with a device being connected, this is a bug"
-                );
-                dev.disconnect().await?;
+        {
+            // Scope is important to not lock device while waiting for disconnect event
+            let dev = self.connected_dev.lock().await;
+            if let Some(dev) = dev.as_ref() {
+                if let Ok(true) = dev.is_connected().await {
+                    assert!(
+                        (*connected_rx.borrow_and_update()),
+                        "connected_rx is false with a device being connected, this is a bug"
+                    );
+                    dev.disconnect().await?;
+                } else {
+                    debug!("device is not connected");
+                    return Err(Error::NoDeviceConnected);
+                }
             } else {
-                debug!("device is not connected");
+                debug!("no device connected");
                 return Err(Error::NoDeviceConnected);
             }
-        } else {
-            debug!("no device connected");
-            return Err(Error::NoDeviceConnected);
         }
         debug!("waiting for disconnect event");
         // the change will be triggered by handle_event -> handle_disconnect which runs in another
         // task
-        self.connected_rx
-            .clone()
+        connected_rx
             .changed()
             .await
             .expect("failed to wait for disconnect event");
@@ -269,17 +289,15 @@ impl Handler {
 
     /// Clears internal state, updates connected flag and calls disconnect callback
     async fn handle_disconnect(&self, peripheral_id: PeripheralId) -> Result<(), Error> {
-        let mut state = self.state.lock().await;
-        if !state
-            .connected
-            .as_ref()
-            .is_some_and(|dev| dev.id() == peripheral_id)
-        {
+        let mut dev = self.connected_dev.lock().await;
+        if !dev.as_ref().is_some_and(|dev| dev.id() == peripheral_id) {
             // event not for currently connected device, ignore
             return Ok(());
         }
+        debug!("locking state for disconnect");
+        let mut state = self.state.lock().await;
         info!("disconnecting");
-        state.connected = None;
+        *dev = None;
         if let Some(handle) = state.listen_handle.take() {
             handle.abort();
         }
@@ -382,13 +400,19 @@ impl Handler {
     /// # Panics
     /// Panics if there is an error with the internal disconnect event
     pub async fn discover_services(&self, address: &str) -> Result<Vec<Service>, Error> {
-        let state = self.state.lock().await;
-        let mut already_connected = state
-            .connected
+        let mut already_connected = self
+            .connected_dev
+            .lock()
+            .await
             .as_ref()
             .is_some_and(|dev| address == fmt_addr(dev.address()));
         let device = if already_connected {
-            state.connected.as_ref().expect("Connection exists").clone()
+            self.connected_dev
+                .lock()
+                .await
+                .as_ref()
+                .expect("Connection exists")
+                .clone()
         } else {
             let devices = self.devices.lock().await;
             let device = devices
@@ -469,8 +493,9 @@ impl Handler {
     /// });
     /// ```
     pub async fn send_data(&self, c: Uuid, data: &[u8]) -> Result<(), Error> {
+        let dev = self.connected_dev.lock().await;
+        let dev = dev.as_ref().ok_or(Error::NoDeviceConnected)?;
         let state = self.state.lock().await;
-        let dev = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = state.get_charac(c)?;
         dev.write(charac, data, WriteType::WithoutResponse).await?;
         Ok(())
@@ -492,8 +517,9 @@ impl Handler {
     /// });
     /// ```
     pub async fn recv_data(&self, c: Uuid) -> Result<Vec<u8>, Error> {
+        let dev = self.connected_dev.lock().await;
+        let dev = dev.as_ref().ok_or(Error::NoDeviceConnected)?;
         let state = self.state.lock().await;
-        let dev = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = state.get_charac(c)?;
         let data = dev.read(charac).await?;
         Ok(data)
@@ -519,8 +545,9 @@ impl Handler {
         c: Uuid,
         callback: impl Fn(&[u8]) + Send + Sync + 'static,
     ) -> Result<(), Error> {
+        let dev = self.connected_dev.lock().await;
+        let dev = dev.as_ref().ok_or(Error::NoDeviceConnected)?;
         let state = self.state.lock().await;
-        let dev = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = state.get_charac(c)?;
         dev.subscribe(charac).await?;
         self.notify_listeners.lock().await.push(Listener {
@@ -536,8 +563,9 @@ impl Handler {
     /// Returns an error if no device is connected or the characteristic is not available
     /// or if the unsubscribe operation fails
     pub async fn unsubscribe(&self, c: Uuid) -> Result<(), Error> {
+        let dev = self.connected_dev.lock().await;
+        let dev = dev.as_ref().ok_or(Error::NoDeviceConnected)?;
         let state = self.state.lock().await;
-        let dev = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let charac = state.get_charac(c)?;
         dev.unsubscribe(charac).await?;
         let mut listeners = self.notify_listeners.lock().await;
@@ -553,7 +581,6 @@ impl Handler {
     }
 
     pub(crate) async fn handle_event(&self, event: CentralEvent) -> Result<(), Error> {
-        dbg!(&event);
         match event {
             CentralEvent::DeviceDisconnected(peripheral_id) => {
                 self.handle_disconnect(peripheral_id).await?;
@@ -571,28 +598,28 @@ impl Handler {
     /// # Errors
     /// Returns an error if no device is connected
     pub async fn connected_device(&self) -> Result<BleDevice, Error> {
-        let state = self.state.lock().await;
-        let p = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+        let p = self.connected_dev.lock().await;
+        let p = p.as_ref().ok_or(Error::NoDeviceConnected)?;
         let d = BleDevice::from_peripheral(p).await?;
         Ok(d)
     }
 
+    #[allow(clippy::redundant_closure_for_method_calls)]
     async fn handle_connect(&self, peripheral_id: PeripheralId) {
-        if !self
-            .state
-            .lock()
-            .await
-            .connected
-            .as_ref()
-            .is_some_and(|dev| dev.id() == peripheral_id)
-        {
-            // event not for currently connected device, ignore
-            return;
+        let connected_device = self.connected_dev.lock().await.as_ref().map(|d| d.id());
+        if let Some(connected_device) = connected_device {
+            if connected_device == peripheral_id {
+                info!("\n################################\nconnection to {peripheral_id} established\n#################################################");
+                self.connected_tx
+                    .send(true)
+                    .expect("failed to send connected update");
+            } else {
+                // event not for currently connected device, ignore
+                debug!("Unexpected connect event for device {peripheral_id}, connected device is {connected_device}");
+                return;
+            }
         }
-        info!("\n################################\nconnection to {peripheral_id} established\n#################################################");
-        self.connected_tx
-            .send(true)
-            .expect("failed to send connected update");
+        debug!("connect event for device {peripheral_id} received without waiting for connection");
     }
 }
 
@@ -603,11 +630,6 @@ async fn listen_notify(dev: Option<Peripheral>, listeners: Arc<Mutex<Vec<Listene
         .await
         .expect("failed to get notifications stream");
     while let Some(data) = stream.next().await {
-        info!(
-            "listen_notify: data.uuid: {:?}, listener:{}",
-            data.uuid,
-            listeners.lock().await.len()
-        );
         for l in listeners.lock().await.iter() {
             info!("listener.uuid: {:?}", l.uuid);
             if l.uuid == data.uuid {
