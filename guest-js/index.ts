@@ -74,7 +74,6 @@ export async function connect(address: string, onDisconnect: (() => void) | null
     })
   } catch (e) {
     console.error(e)
-    await disconnect()
   }
 }
 
