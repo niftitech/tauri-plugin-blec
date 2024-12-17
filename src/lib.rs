@@ -11,7 +11,7 @@ mod android;
 mod commands;
 mod error;
 mod handler;
-mod models;
+pub mod models;
 
 pub use error::Error;
 pub use handler::Handler;

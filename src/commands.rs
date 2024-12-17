@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::error::Result;
 use crate::get_handler;
-use crate::models::{BleDevice, WriteType};
+use crate::models::{BleDevice, ScanFilter, WriteType};
 
 #[command]
 pub(crate) async fn scan<R: Runtime>(
@@ -24,7 +24,9 @@ pub(crate) async fn scan<R: Runtime>(
                 .expect("failed to send device to the front-end");
         }
     });
-    handler.discover(Some(tx), timeout, vec![]).await?;
+    handler
+        .discover(Some(tx), timeout, ScanFilter::None)
+        .await?;
     Ok(())
 }
 

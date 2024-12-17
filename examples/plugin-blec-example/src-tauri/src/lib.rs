@@ -9,7 +9,14 @@ async fn test() -> bool {
     const DATA: [u8; 500] = [0; 500];
     let handler = tauri_plugin_blec::get_handler().unwrap();
     let start = std::time::Instant::now();
-    handler.send_data(CHARACTERISTIC_UUID, &DATA).await.unwrap();
+    handler
+        .send_data(
+            CHARACTERISTIC_UUID,
+            &DATA,
+            tauri_plugin_blec::models::WriteType::WithoutResponse,
+        )
+        .await
+        .unwrap();
     let response = handler.recv_data(CHARACTERISTIC_UUID).await.unwrap();
     let time = start.elapsed();
     info!("Time elapsed: {:?}", time);

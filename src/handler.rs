@@ -1,7 +1,7 @@
 use crate::error::Error;
-use crate::models::{self, fmt_addr, BleDevice, Service};
+use crate::models::{self, fmt_addr, BleDevice, ScanFilter, Service};
 use btleplug::api::CentralEvent;
-use btleplug::api::{Central, Characteristic, Manager as _, Peripheral as _, ScanFilter};
+use btleplug::api::{Central, Characteristic, Manager as _, Peripheral as _};
 use btleplug::platform::PeripheralId;
 use futures::{Stream, StreamExt};
 use std::collections::HashMap;
@@ -16,8 +16,6 @@ use uuid::Uuid;
 
 #[cfg(target_os = "android")]
 use crate::android::{Adapter, Manager, Peripheral};
-#[cfg(target_os = "android")]
-use btleplug::api::{Central as _, Manager as _, Peripheral as _};
 #[cfg(not(target_os = "android"))]
 use btleplug::platform::{Adapter, Manager, Peripheral};
 
@@ -151,7 +149,7 @@ impl Handler {
         on_disconnect: Option<Box<dyn Fn() + Send>>,
     ) -> Result<(), Error> {
         if self.devices.lock().await.len() == 0 {
-            self.discover(None, 1000, vec![]).await?;
+            self.discover(None, 1000, ScanFilter::None).await?;
         }
         // cancel any running discovery
         let _ = self.stop_scan().await;
@@ -222,6 +220,7 @@ impl Handler {
             );
             debug!("Connecting to device");
             device.connect().await?;
+            debug!("waiting for connection event");
             // wait for the actual connection to be established
             connected_rx
                 .changed()
@@ -344,7 +343,7 @@ impl Handler {
         &self,
         tx: Option<mpsc::Sender<Vec<BleDevice>>>,
         timeout: u64,
-        filter: Vec<Uuid>,
+        filter: ScanFilter,
     ) -> Result<(), Error> {
         let mut state = self.state.lock().await;
         // stop any ongoing scan
@@ -354,7 +353,7 @@ impl Handler {
         }
         // start a new scan
         self.adapter
-            .start_scan(ScanFilter { services: filter })
+            .start_scan(btleplug::api::ScanFilter::default())
             .await?;
         if let Some(tx) = &state.scan_update_channel {
             tx.send(true).await?;
@@ -368,10 +367,11 @@ impl Handler {
             let mut devices;
             for _ in 0..loops {
                 sleep(Duration::from_millis(200)).await;
-                let discovered = adapter
+                let mut discovered = adapter
                     .peripherals()
                     .await
                     .expect("failed to get peripherals");
+                filter_peripherals(&mut discovered, &filter).await;
                 devices = Self::add_devices(&mut self_devices, discovered).await;
                 if !devices.is_empty() {
                     if let Some(tx) = &tx {
@@ -412,17 +412,24 @@ impl Handler {
                 .expect("Connection exists")
                 .clone()
         } else {
-            let devices = self.devices.lock().await;
-            let device = devices
+            let device = self
+                .devices
+                .lock()
+                .await
                 .get(address)
-                .ok_or(Error::UnknownPeripheral(address.to_string()))?;
+                .ok_or(Error::UnknownPeripheral(address.to_string()))?
+                .clone();
             if device.is_connected().await? {
                 already_connected = true;
-            } else {
-                self.connect_device(address).await?;
+            } else if let Err(e) = self.connect_device(address).await {
+                *self.connected_dev.lock().await = None;
+                let _ = self.connected_tx.send(false);
+                error!("Failed to connect device: {e}");
+                return Err(e);
             }
-            device.clone()
+            device
         };
+        debug!("discovering services on {address}");
         if device.services().is_empty() {
             device.discover_services().await?;
         }
@@ -431,6 +438,7 @@ impl Handler {
             let mut connected_rx = self.connected_rx.clone();
             if *connected_rx.borrow_and_update() {
                 device.disconnect().await?;
+                debug!("waiting for disconnect event");
                 connected_rx
                     .changed()
                     .await
@@ -625,6 +633,51 @@ impl Handler {
                 "connect event for device {peripheral_id} received without waiting for connection"
             );
         }
+    }
+}
+
+async fn filter_peripherals(discovered: &mut Vec<Peripheral>, filter: &ScanFilter) {
+    if matches!(filter, ScanFilter::None) {
+        return;
+    }
+    let mut remove = vec![];
+    for p in discovered.iter().enumerate() {
+        let Ok(Some(properties)) = p.1.properties().await else {
+            // can't filter without properties
+            remove.push(p.0);
+            continue;
+        };
+        match filter {
+            ScanFilter::None => unreachable!("Earyl return for no filter"),
+            ScanFilter::Service(uuid) => {
+                if !properties.services.iter().any(|s| s == uuid) {
+                    remove.push(p.0);
+                }
+            }
+            ScanFilter::AnyService(uuids) => {
+                if !properties.services.iter().any(|s| uuids.contains(s)) {
+                    remove.push(p.0);
+                }
+            }
+            ScanFilter::AllServices(uuids) => {
+                if !uuids.iter().all(|s| properties.services.contains(s)) {
+                    remove.push(p.0);
+                }
+            }
+            ScanFilter::ManufacturerData(key, value) => {
+                if !properties
+                    .manufacturer_data
+                    .get(key)
+                    .is_some_and(|v| v == value)
+                {
+                    remove.push(p.0);
+                }
+            }
+        }
+    }
+
+    for i in remove.iter().rev() {
+        discovered.swap_remove(*i);
     }
 }
 

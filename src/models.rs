@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use btleplug::api::BDAddr;
 use enumflags2::BitFlags;
 use serde::{Deserialize, Serialize};
@@ -10,6 +12,8 @@ pub struct BleDevice {
     pub address: String,
     pub name: String,
     pub is_connected: bool,
+    pub manufacturer_data: HashMap<u16, Vec<u8>>,
+    pub services: Vec<Uuid>,
 }
 
 impl Eq for BleDevice {}
@@ -33,22 +37,22 @@ impl PartialEq for BleDevice {
 }
 
 impl BleDevice {
-    pub async fn from_peripheral<P: btleplug::api::Peripheral>(
+    pub(crate) async fn from_peripheral<P: btleplug::api::Peripheral>(
         peripheral: &P,
     ) -> Result<Self, error::Error> {
         #[cfg(target_vendor = "apple")]
         let address = peripheral.id().to_string();
         #[cfg(not(target_vendor = "apple"))]
         let address = peripheral.address().to_string();
-        let name = peripheral
-            .properties()
-            .await?
-            .unwrap_or_default()
+        let properties = peripheral.properties().await?.unwrap_or_default();
+        let name = properties
             .local_name
             .unwrap_or_else(|| peripheral.id().to_string());
         Ok(Self {
             address,
             name,
+            manufacturer_data: properties.manufacturer_data,
+            services: properties.services,
             is_connected: peripheral.is_connected().await?,
         })
     }
@@ -130,6 +134,7 @@ fn get_flags(properties: btleplug::api::CharPropFlags) -> BitFlags<CharProps, u8
     flags
 }
 
+#[must_use]
 pub fn fmt_addr(addr: BDAddr) -> String {
     let a = addr.into_inner();
     format!(
@@ -154,4 +159,16 @@ impl From<WriteType> for btleplug::api::WriteType {
             WriteType::WithoutResponse => btleplug::api::WriteType::WithoutResponse,
         }
     }
+}
+
+pub enum ScanFilter {
+    None,
+    /// Matches if the device advertises the specified service.
+    Service(Uuid),
+    /// Matches if the device advertises any of the specified services.
+    AnyService(Vec<Uuid>),
+    /// Matches if the device advertises all of the specified services.
+    AllServices(Vec<Uuid>),
+    /// Matches if the device advertises the specified manufacturer data.
+    ManufacturerData(u16, Vec<u8>),
 }
