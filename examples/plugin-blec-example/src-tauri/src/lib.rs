@@ -9,18 +9,8 @@ async fn test() -> bool {
     const DATA: [u8; 500] = [0; 500];
     let handler = tauri_plugin_blec::get_handler().unwrap();
     let start = std::time::Instant::now();
-    handler
-        .lock()
-        .await
-        .send_data(CHARACTERISTIC_UUID, &DATA)
-        .await
-        .unwrap();
-    let response = handler
-        .lock()
-        .await
-        .recv_data(CHARACTERISTIC_UUID)
-        .await
-        .unwrap();
+    handler.send_data(CHARACTERISTIC_UUID, &DATA).await.unwrap();
+    let response = handler.recv_data(CHARACTERISTIC_UUID).await.unwrap();
     let time = start.elapsed();
     info!("Time elapsed: {:?}", time);
     assert_eq!(response, DATA);
@@ -31,7 +21,7 @@ async fn test() -> bool {
 #[allow(clippy::missing_panics_doc)]
 pub fn run() {
     tauri::Builder::default()
-        // .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_blec::init())
         .invoke_handler(tauri::generate_handler![test])

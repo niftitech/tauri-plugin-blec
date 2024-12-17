@@ -4,13 +4,14 @@ use btleplug::api::CentralEvent;
 use btleplug::api::{
     Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
 };
+use btleplug::platform::PeripheralId;
 use futures::{Stream, StreamExt};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::async_runtime;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, watch, Mutex};
 use tokio::time::sleep;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -28,17 +29,30 @@ struct Listener {
     callback: ListenerCallback,
 }
 
-pub struct Handler {
+struct HandlerState {
     connected: Option<Peripheral>,
     characs: Vec<Characteristic>,
-    devices: Arc<Mutex<HashMap<String, Peripheral>>>,
-    adapter: Arc<Adapter>,
     listen_handle: Option<async_runtime::JoinHandle<()>>,
-    notify_listeners: Arc<Mutex<Vec<Listener>>>,
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
     connection_update_channel: Option<mpsc::Sender<bool>>,
     scan_update_channel: Option<mpsc::Sender<bool>>,
     scan_task: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl HandlerState {
+    fn get_charac(&self, uuid: Uuid) -> Result<&Characteristic, Error> {
+        let charac = self.characs.iter().find(|c| c.uuid == uuid);
+        charac.ok_or(Error::CharacNotAvailable(uuid.to_string()))
+    }
+}
+
+pub struct Handler {
+    devices: Arc<Mutex<HashMap<String, Peripheral>>>,
+    adapter: Arc<Adapter>,
+    notify_listeners: Arc<Mutex<Vec<Listener>>>,
+    connected_rx: watch::Receiver<bool>,
+    connected_tx: watch::Sender<bool>,
+    state: Mutex<HandlerState>,
 }
 
 async fn get_central() -> Result<Adapter, Error> {
@@ -51,28 +65,33 @@ async fn get_central() -> Result<Adapter, Error> {
 impl Handler {
     pub(crate) async fn new() -> Result<Self, Error> {
         let central = get_central().await?;
+        let (connected_tx, connected_rx) = watch::channel(false);
         Ok(Self {
             devices: Arc::new(Mutex::new(HashMap::new())),
-            characs: vec![],
-            connected: None,
             adapter: Arc::new(central),
-            listen_handle: None,
             notify_listeners: Arc::new(Mutex::new(vec![])),
-            on_disconnect: None,
-            connection_update_channel: None,
-            scan_task: None,
-            scan_update_channel: None,
+            connected_rx,
+            connected_tx,
+            state: Mutex::new(HandlerState {
+                on_disconnect: None,
+                connection_update_channel: None,
+                scan_task: None,
+                scan_update_channel: None,
+                listen_handle: None,
+                characs: vec![],
+                connected: None,
+            }),
         })
     }
 
     /// Returns true if a device is connected
     pub fn is_connected(&self) -> bool {
-        self.connected.is_some()
+        *self.connected_rx.borrow()
     }
 
     /// Returns true if the adapter is scanning
-    pub fn is_scanning(&self) -> bool {
-        if let Some(handle) = &self.scan_task {
+    pub async fn is_scanning(&self) -> bool {
+        if let Some(handle) = &self.state.lock().await.scan_task {
             !handle.is_finished()
         } else {
             false
@@ -87,14 +106,14 @@ impl Handler {
     /// async_runtime::block_on(async {
     ///     let handler = tauri_plugin_blec::get_handler().unwrap();
     ///     let (tx, mut rx) = mpsc::channel(1);
-    ///     handler.lock().await.set_scanning_update_channel(tx);
+    ///     handler.set_scanning_update_channel(tx).await;
     ///     while let Some(scanning) = rx.recv().await {
     ///         println!("Scanning: {scanning}");
     ///     }
     /// });
     /// ```
-    pub fn set_scanning_update_channel(&mut self, tx: mpsc::Sender<bool>) {
-        self.scan_update_channel = Some(tx);
+    pub async fn set_scanning_update_channel(&self, tx: mpsc::Sender<bool>) {
+        self.state.lock().await.scan_update_channel = Some(tx);
     }
 
     /// Takes a sender that will be used to send changes in the connection status
@@ -105,14 +124,14 @@ impl Handler {
     /// async_runtime::block_on(async {
     ///     let handler = tauri_plugin_blec::get_handler().unwrap();
     ///     let (tx, mut rx) = mpsc::channel(1);
-    ///     handler.lock().await.set_connection_update_channel(tx);
+    ///     handler.set_connection_update_channel(tx).await;
     ///     while let Some(connected) = rx.recv().await {
     ///         println!("Connected: {connected}");
     ///     }
     /// });
     /// ```
-    pub fn set_connection_update_channel(&mut self, tx: mpsc::Sender<bool>) {
-        self.connection_update_channel = Some(tx);
+    pub async fn set_connection_update_channel(&self, tx: mpsc::Sender<bool>) {
+        self.state.lock().await.connection_update_channel = Some(tx);
     }
 
     /// Connects to the given address
@@ -129,8 +148,8 @@ impl Handler {
     /// });
     /// ```
     pub async fn connect(
-        &mut self,
-        address: String,
+        &self,
+        address: &str,
         on_disconnect: Option<Box<dyn Fn() + Send>>,
     ) -> Result<(), Error> {
         if self.devices.lock().await.len() == 0 {
@@ -138,54 +157,70 @@ impl Handler {
         }
         // connect to the given address
         self.connect_device(address).await?;
+        let mut state = self.state.lock().await;
         // set callback to run on disconnect
         if let Some(cb) = on_disconnect {
-            self.on_disconnect = Some(Mutex::new(cb));
+            state.on_disconnect = Some(Mutex::new(cb));
         }
         // discover service/characteristics
-        self.connect_services().await?;
+        self.connect_services(&mut state).await?;
         // start background task for notifications
-        self.listen_handle = Some(async_runtime::spawn(listen_notify(
-            self.connected.clone(),
+        state.listen_handle = Some(async_runtime::spawn(listen_notify(
+            state.connected.clone(),
             self.notify_listeners.clone(),
         )));
         Ok(())
     }
 
-    async fn connect_services(&mut self) -> Result<(), Error> {
-        let device = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+    async fn connect_services(&self, state: &mut HandlerState) -> Result<(), Error> {
+        let device = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let mut services = device.services();
         if services.is_empty() {
             device.discover_services().await?;
             services = device.services();
         }
-        dbg!(&services);
         for s in services {
             for c in &s.characteristics {
-                self.characs.push(c.clone());
+                state.characs.push(c.clone());
             }
         }
         Ok(())
     }
 
-    async fn connect_device(&mut self, address: String) -> Result<(), Error> {
+    async fn connect_device(&self, address: &str) -> Result<(), Error> {
         debug!("connecting to {address}",);
-        if let Some(dev) = self.connected.as_ref() {
+        let mut state = self.state.lock().await;
+        if let Some(dev) = state.connected.as_ref() {
             if address == fmt_addr(dev.address()) {
                 return Err(Error::AlreadyConnected);
             }
         }
+        let mut connected_rx = self.connected_rx.clone();
         let devices = self.devices.lock().await;
         let device = devices
-            .get(&address)
+            .get(address)
             .ok_or(Error::UnknownPeripheral(address.to_string()))?;
+        state.connected = Some(device.clone());
         if !device.is_connected().await? {
+            assert!(
+                !(*connected_rx.borrow_and_update()),
+                "connected_rx is true without device being connected, this is a bug"
+            );
             debug!("Connecting to device");
             device.connect().await?;
             debug!("Connecting done");
         }
-        self.connected = Some(device.clone());
-        if let Some(tx) = &self.connection_update_channel {
+        // wait for the actual connection to be established
+        connected_rx
+            .changed()
+            .await
+            .expect("failed to wait for connection event");
+        if !*self.connected_rx.borrow() {
+            // still not connected
+            return Err(Error::ConnectionFailed);
+        }
+
+        if let Some(tx) = &state.connection_update_channel {
             tx.send(true)
                 .await
                 .expect("failed to send connection update");
@@ -194,28 +229,72 @@ impl Handler {
     }
 
     /// Disconnects from the connected device
+    /// This triggers a disconnect and then waits for the actual disconnect event from the adapter
     /// # Errors
-    /// Returns an error if no device is connected or if the disconnect operation fails
-    pub async fn disconnect(&mut self) -> Result<(), Error> {
-        debug!("disconnecting");
-        if let Some(handle) = self.listen_handle.take() {
+    /// Returns an error if no device is connected or if the disconnect fails
+    /// # Panics
+    /// panics if there is an error with handling the internal disconnect event
+    pub async fn disconnect(&self) -> Result<(), Error> {
+        debug!("disconnect triggered by user");
+        let mut connected_rx = self.connected_rx.clone();
+        if let Some(dev) = self.state.lock().await.connected.as_mut() {
+            if let Ok(true) = dev.is_connected().await {
+                assert!(
+                    !(*connected_rx.borrow_and_update()),
+                    "connected_rx is false with a device being connected, this is a bug"
+                );
+                dev.disconnect().await?;
+            } else {
+                debug!("device is not connected");
+                return Err(Error::NoDeviceConnected);
+            }
+        } else {
+            debug!("no device connected");
+            return Err(Error::NoDeviceConnected);
+        }
+        debug!("waiting for disconnect event");
+        // the change will be triggered by handle_event -> handle_disconnect which runs in another
+        // task
+        self.connected_rx
+            .clone()
+            .changed()
+            .await
+            .expect("failed to wait for disconnect event");
+        if *self.connected_rx.borrow() {
+            // still connected
+            return Err(Error::DisconnectFailed);
+        }
+        Ok(())
+    }
+
+    /// Clears internal state, updates connected flag and calls disconnect callback
+    async fn handle_disconnect(&self, peripheral_id: PeripheralId) -> Result<(), Error> {
+        let mut state = self.state.lock().await;
+        if !state
+            .connected
+            .as_ref()
+            .is_some_and(|dev| dev.id() == peripheral_id)
+        {
+            // event not for currently connected device, ignore
+            return Ok(());
+        }
+        info!("disconnecting");
+        state.connected = None;
+        if let Some(handle) = state.listen_handle.take() {
             handle.abort();
         }
         *self.notify_listeners.lock().await = vec![];
-        if let Some(dev) = self.connected.as_mut() {
-            if let Ok(true) = dev.is_connected().await {
-                dev.disconnect().await?;
-            }
-            self.connected = None;
-        }
-        if let Some(on_disconnect) = &self.on_disconnect {
+        if let Some(on_disconnect) = &state.on_disconnect {
             let callback = on_disconnect.lock().await;
             callback();
         }
-        if let Some(tx) = &self.connection_update_channel {
+        if let Some(tx) = &state.connection_update_channel {
             tx.send(false).await?;
         }
-        self.characs.clear();
+        state.characs.clear();
+        self.connected_tx
+            .send(false)
+            .expect("failed to send connected update");
         Ok(())
     }
 
@@ -246,13 +325,14 @@ impl Handler {
     /// });
     /// ```
     pub async fn discover(
-        &mut self,
+        &self,
         tx: Option<mpsc::Sender<Vec<BleDevice>>>,
         timeout: u64,
         filter: Vec<Uuid>,
     ) -> Result<(), Error> {
+        let mut state = self.state.lock().await;
         // stop any ongoing scan
-        if let Some(handle) = self.scan_task.take() {
+        if let Some(handle) = state.scan_task.take() {
             handle.abort();
             self.adapter.stop_scan().await?;
         }
@@ -260,13 +340,13 @@ impl Handler {
         self.adapter
             .start_scan(ScanFilter { services: filter })
             .await?;
-        if let Some(tx) = &self.scan_update_channel {
+        if let Some(tx) = &state.scan_update_channel {
             tx.send(true).await?;
         }
         let mut self_devices = self.devices.clone();
         let adapter = self.adapter.clone();
-        let scan_update_channel = self.scan_update_channel.clone();
-        self.scan_task = Some(tokio::task::spawn(async move {
+        let scan_update_channel = state.scan_update_channel.clone();
+        state.scan_task = Some(tokio::task::spawn(async move {
             self_devices.lock().await.clear();
             let loops = timeout / 200;
             let mut devices;
@@ -297,13 +377,18 @@ impl Handler {
     /// If the device is not connected, a connection is made in order to discover the services and characteristics
     /// After the discovery is done, the device is disconnected
     /// If the devices was already connected, it will stay connected
+    /// # Errors
+    /// Returns an error if the device is not found, if the connection fails, or if the discovery fails
+    /// # Panics
+    /// Panics if there is an error with the internal disconnect event
     pub async fn discover_services(&self, address: &str) -> Result<Vec<Service>, Error> {
-        let mut already_connected = self
+        let state = self.state.lock().await;
+        let mut already_connected = state
             .connected
             .as_ref()
             .is_some_and(|dev| address == fmt_addr(dev.address()));
         let device = if already_connected {
-            self.connected.as_ref().expect("Connection exists").clone()
+            state.connected.as_ref().expect("Connection exists").clone()
         } else {
             let devices = self.devices.lock().await;
             let device = devices
@@ -312,7 +397,7 @@ impl Handler {
             if device.is_connected().await? {
                 already_connected = true;
             } else {
-                device.connect().await?;
+                self.connect_device(address).await?;
             }
             device.clone()
         };
@@ -321,7 +406,14 @@ impl Handler {
         }
         let services = device.services().iter().map(Service::from).collect();
         if !already_connected {
-            device.disconnect().await?;
+            let mut connected_rx = self.connected_rx.clone();
+            if *connected_rx.borrow_and_update() {
+                device.disconnect().await?;
+                connected_rx
+                    .changed()
+                    .await
+                    .expect("failed to wait for disconnect event");
+            }
         }
         Ok(services)
     }
@@ -329,12 +421,13 @@ impl Handler {
     /// Stops scanning for devices
     /// # Errors
     /// Returns an error if stopping the scan fails
-    pub async fn stop_scan(&mut self) -> Result<(), Error> {
+    pub async fn stop_scan(&self) -> Result<(), Error> {
         self.adapter.stop_scan().await?;
-        if let Some(handle) = self.scan_task.take() {
+        let mut state = self.state.lock().await;
+        if let Some(handle) = state.scan_task.take() {
             handle.abort();
         }
-        if let Some(tx) = &self.scan_update_channel {
+        if let Some(tx) = &state.scan_update_channel {
             tx.send(false).await?;
         }
         Ok(())
@@ -375,9 +468,10 @@ impl Handler {
     ///     let response = handler.lock().await.send_data(CHARACTERISTIC_UUID,&data).await.unwrap();
     /// });
     /// ```
-    pub async fn send_data(&mut self, c: Uuid, data: &[u8]) -> Result<(), Error> {
-        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
-        let charac = self.get_charac(c)?;
+    pub async fn send_data(&self, c: Uuid, data: &[u8]) -> Result<(), Error> {
+        let state = self.state.lock().await;
+        let dev = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+        let charac = state.get_charac(c)?;
         dev.write(charac, data, WriteType::WithoutResponse).await?;
         Ok(())
     }
@@ -397,16 +491,12 @@ impl Handler {
     ///     let response = handler.lock().await.recv_data(CHARACTERISTIC_UUID).await.unwrap();
     /// });
     /// ```
-    pub async fn recv_data(&mut self, c: Uuid) -> Result<Vec<u8>, Error> {
-        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
-        let charac = self.get_charac(c)?;
+    pub async fn recv_data(&self, c: Uuid) -> Result<Vec<u8>, Error> {
+        let state = self.state.lock().await;
+        let dev = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+        let charac = state.get_charac(c)?;
         let data = dev.read(charac).await?;
         Ok(data)
-    }
-
-    fn get_charac(&self, uuid: Uuid) -> Result<&Characteristic, Error> {
-        let charac = self.characs.iter().find(|c| c.uuid == uuid);
-        charac.ok_or(Error::CharacNotAvailable(uuid.to_string()))
     }
 
     /// Subscribe to notifications from the given characteristic
@@ -425,12 +515,13 @@ impl Handler {
     /// });
     /// ```
     pub async fn subscribe(
-        &mut self,
+        &self,
         c: Uuid,
         callback: impl Fn(&[u8]) + Send + Sync + 'static,
     ) -> Result<(), Error> {
-        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
-        let charac = self.get_charac(c)?;
+        let state = self.state.lock().await;
+        let dev = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+        let charac = state.get_charac(c)?;
         dev.subscribe(charac).await?;
         self.notify_listeners.lock().await.push(Listener {
             uuid: charac.uuid,
@@ -444,9 +535,10 @@ impl Handler {
     /// # Errors
     /// Returns an error if no device is connected or the characteristic is not available
     /// or if the unsubscribe operation fails
-    pub async fn unsubscribe(&mut self, c: Uuid) -> Result<(), Error> {
-        let dev = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
-        let charac = self.get_charac(c)?;
+    pub async fn unsubscribe(&self, c: Uuid) -> Result<(), Error> {
+        let state = self.state.lock().await;
+        let dev = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+        let charac = state.get_charac(c)?;
         dev.unsubscribe(charac).await?;
         let mut listeners = self.notify_listeners.lock().await;
         listeners.retain(|l| l.uuid != charac.uuid);
@@ -460,16 +552,16 @@ impl Handler {
         Ok(events)
     }
 
-    pub(crate) async fn handle_event(&mut self, event: CentralEvent) -> Result<(), Error> {
+    pub(crate) async fn handle_event(&self, event: CentralEvent) -> Result<(), Error> {
+        dbg!(&event);
         match event {
             CentralEvent::DeviceDisconnected(peripheral_id) => {
-                if let Some(dev) = self.connected.as_ref() {
-                    if peripheral_id == dev.id() {
-                        tracing::info!("Received disconnect event for currently connected device");
-                        self.disconnect().await?;
-                    }
-                }
+                self.handle_disconnect(peripheral_id).await?;
             }
+            CentralEvent::DeviceConnected(peripheral_id) => {
+                self.handle_connect(peripheral_id).await;
+            }
+
             _event => {}
         }
         Ok(())
@@ -479,9 +571,28 @@ impl Handler {
     /// # Errors
     /// Returns an error if no device is connected
     pub async fn connected_device(&self) -> Result<BleDevice, Error> {
-        let p = self.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
+        let state = self.state.lock().await;
+        let p = state.connected.as_ref().ok_or(Error::NoDeviceConnected)?;
         let d = BleDevice::from_peripheral(p).await?;
         Ok(d)
+    }
+
+    async fn handle_connect(&self, peripheral_id: PeripheralId) {
+        if !self
+            .state
+            .lock()
+            .await
+            .connected
+            .as_ref()
+            .is_some_and(|dev| dev.id() == peripheral_id)
+        {
+            // event not for currently connected device, ignore
+            return;
+        }
+        info!("\n################################\nconnection to {peripheral_id} established\n#################################################");
+        self.connected_tx
+            .send(true)
+            .expect("failed to send connected update");
     }
 }
 
