@@ -5,18 +5,6 @@ use uuid::Uuid;
 
 use crate::error;
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PingRequest {
-    pub value: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PingResponse {
-    pub value: Option<String>,
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BleDevice {
     pub address: String,
@@ -151,6 +139,7 @@ pub fn fmt_addr(addr: BDAddr) -> String {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum WriteType {
     /// aka request.
     WithResponse,

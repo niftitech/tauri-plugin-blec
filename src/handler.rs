@@ -1,9 +1,7 @@
 use crate::error::Error;
 use crate::models::{self, fmt_addr, BleDevice, Service};
 use btleplug::api::CentralEvent;
-use btleplug::api::{
-    Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType,
-};
+use btleplug::api::{Central, Characteristic, Manager as _, Peripheral as _, ScanFilter};
 use btleplug::platform::PeripheralId;
 use futures::{Stream, StreamExt};
 use std::collections::HashMap;
