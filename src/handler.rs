@@ -131,7 +131,9 @@ impl Handler {
     }
 
     /// Connects to the given address
-    /// If a callback is provided, it will be called when the device is disconnected
+    /// If a callback is provided, it will be called when the device is disconnected.
+    /// Because connecting sometimes fails especially on android, this method tries up to 3 times
+    /// before returning an error
     /// # Errors
     /// Returns an error if no devices are found, if the device is already connected,
     /// if the connection fails, or if the service/characteristics discovery fails
@@ -154,7 +156,18 @@ impl Handler {
         // cancel any running discovery
         let _ = self.stop_scan().await;
         // connect to the given address
-        if let Err(e) = self.connect_device(address).await {
+        // try up to 3 times before returning an error
+        let mut connected = Ok(());
+        for _ in 0..3 {
+            if let Err(e) = self.connect_device(address).await {
+                error!("Failed to connect device: {e}");
+                connected = Err(e);
+            } else {
+                connected = Ok(());
+                break;
+            }
+        }
+        if let Err(e) = connected {
             *self.connected_dev.lock().await = None;
             let _ = self.connected_tx.send(false);
             error!("Failed to connect device: {e}");
