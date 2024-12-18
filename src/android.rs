@@ -277,7 +277,6 @@ impl btleplug::api::Peripheral for Peripheral {
                 characteristics,
             });
         }
-        info!("services: {services:?}");
         services
     }
 

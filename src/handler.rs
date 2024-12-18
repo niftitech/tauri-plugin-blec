@@ -206,15 +206,6 @@ impl Handler {
 
     async fn connect_device(&self, address: &str) -> Result<(), Error> {
         debug!("connecting to {address}",);
-        {
-            // scope is important to not lock device while waiting for connect event
-            let dev = self.connected_dev.lock().await;
-            if let Some(dev) = dev.as_ref() {
-                if address == fmt_addr(dev.address()) {
-                    return Err(Error::AlreadyConnected);
-                }
-            }
-        }
         let mut connected_rx = self.connected_rx.clone();
         let devices = self.devices.lock().await;
         let device = devices
@@ -437,7 +428,7 @@ impl Handler {
             } else if let Err(e) = self.connect_device(address).await {
                 *self.connected_dev.lock().await = None;
                 let _ = self.connected_tx.send(false);
-                error!("Failed to connect device: {e}");
+                error!("Failed to connect for discovery: {e}");
                 return Err(e);
             }
             device
