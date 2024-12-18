@@ -4,20 +4,15 @@ import Peripheral
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import app.tauri.annotation.InvokeArg
-import app.tauri.plugin.Invoke
-
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanSettings
-import android.bluetooth.le.ScanFilter.Builder;
+import android.bluetooth.le.ScanFilter.Builder
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.content.SharedPreferences
@@ -26,11 +21,15 @@ import android.net.Uri
 import android.os.Build
 import android.os.ParcelUuid
 import android.provider.Settings
+import android.util.SparseArray
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.app.ActivityCompat.startActivityForResult
 import androidx.core.content.ContextCompat.getSystemService
+import app.tauri.annotation.InvokeArg
 import app.tauri.plugin.Channel
+import app.tauri.plugin.Invoke
+import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 
 class BleDevice(
@@ -38,6 +37,8 @@ class BleDevice(
     private val name: String,
     private val rssi: Int,
     private val connected: Boolean,
+    private val manufacturerData: SparseArray<ByteArray>?,
+    private val services: List<ParcelUuid>?
 ){
     fun toJsObject():JSObject{
         val obj = JSObject()
@@ -46,6 +47,33 @@ class BleDevice(
         obj.put("name",name)
         obj.put("connected",connected)
         obj.put("rssi",rssi)
+        // create Json Array from services
+        val services = if (services != null) {
+            val arr = JSArray();
+            for (service in services){
+                arr.put(service)
+            }
+            arr
+        } else { null }
+        obj.put("services",services)
+        // crate object from sparse Array
+        val manufacturerData = if (manufacturerData != null) {
+            val subObj = JSObject()
+            for (i in 0 until manufacturerData.size()) {
+                val key = manufacturerData.keyAt(i)
+                // get the object by the key.
+                val value = manufacturerData.get(key)
+                val arr = JSArray()
+                for (element in value){
+                    // toInt is needed to generate number in Json
+                    // the UByte is serialized as string
+                    arr.put(element.toUByte().toInt())
+                }
+                subObj.put(key.toString(),arr)
+            }
+            subObj
+        } else { null }
+        obj.put("manufacturerData",manufacturerData)
         return obj
     }
 }
@@ -170,7 +198,9 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
                     result.device.address,
                     name,
                     result.rssi,
-                    connected
+                    connected,
+                    result.scanRecord?.manufacturerSpecificData,
+                    result.scanRecord?.serviceUuids
                 )
                 this@BleClient.plugin.devices[device.address] = Peripheral(this@BleClient.activity, result.device, this@BleClient.plugin)
                 val res = JSObject()
