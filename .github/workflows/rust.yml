@@ -16,6 +16,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install tauri dependencies
+      run: sudo apt-get update && suda apt-get install -y apt install libwebkit2gtk-4.1-dev \
+        build-essential \
+        curl \
+        wget \
+        file \
+        libxdo-dev \
+        libssl-dev \
+        libayatana-appindicator3-dev \
+        librsvg2-dev
     - name: Build
       run: cargo build --verbose
     - name: Run tests
