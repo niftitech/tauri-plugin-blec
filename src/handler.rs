@@ -158,9 +158,13 @@ impl Handler {
         // connect to the given address
         // try up to 3 times before returning an error
         let mut connected = Ok(());
-        for _ in 0..3 {
+        for i in 0..3 {
             if let Err(e) = self.connect_device(address).await {
-                error!("Failed to connect device: {e}");
+                if i < 2 {
+                    warn!("Failed to connect device, retrying in 1s: {e}");
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
                 connected = Err(e);
             } else {
                 connected = Ok(());
@@ -624,7 +628,7 @@ impl Handler {
         let connected_device = self.connected_dev.lock().await.as_ref().map(|d| d.id());
         if let Some(connected_device) = connected_device {
             if connected_device == peripheral_id {
-                info!("\n################################\nconnection to {peripheral_id} established\n#################################################");
+                debug!("connection to {peripheral_id} established");
                 self.connected_tx
                     .send(true)
                     .expect("failed to send connected update");
