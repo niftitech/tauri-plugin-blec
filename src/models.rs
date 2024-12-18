@@ -162,6 +162,8 @@ impl From<WriteType> for btleplug::api::WriteType {
     }
 }
 
+/// Filter for discovering devices.
+/// Only devices matching the filter will be returned by the handler::discover method
 pub enum ScanFilter {
     None,
     /// Matches if the device advertises the specified service.

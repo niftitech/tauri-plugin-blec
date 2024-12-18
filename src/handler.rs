@@ -142,7 +142,7 @@ impl Handler {
     /// use tauri::async_runtime;
     /// async_runtime::block_on(async {
     ///    let handler = tauri_plugin_blec::get_handler().unwrap();
-    ///    handler.lock().await.connect("00:00:00:00:00:00".to_string(),Some(|| println!("disconnected"))).await.unwrap();
+    ///    handler.connect("00:00:00:00:00:00", Some(Box::new(|| println!("disconnected")))).await.unwrap();
     /// });
     /// ```
     pub async fn connect(
@@ -321,14 +321,12 @@ impl Handler {
         Ok(())
     }
 
-    /// Scans for [timeout] milliseconds and periodically sends discovered devices
+    /// Scans for `timeout` milliseconds and periodically sends discovered devices
     /// to the given channel.
     /// A task is spawned to handle the scan and send the devices, so the function
     /// returns immediately.
     ///
-    /// A list of Service UUIDs can be provided to filter the devices discovered.
-    /// Devices that provide at least one of the services in the list will be included.
-    /// An empty list will include all devices.
+    /// A Variant of [`ScanFilter`] can be provided to filter the discovered devices
     ///
     /// # Errors
     /// Returns an error if starting the scan fails
@@ -338,10 +336,12 @@ impl Handler {
     /// ```no_run
     /// use tauri::async_runtime;
     /// use tokio::sync::mpsc;
+    /// use tauri_plugin_blec::models::ScanFilter;
+    ///
     /// async_runtime::block_on(async {
     ///     let handler = tauri_plugin_blec::get_handler().unwrap();
     ///     let (tx, mut rx) = mpsc::channel(1);
-    ///     handler.lock().await.discover(Some(tx),1000).await.unwrap();
+    ///     handler.discover(Some(tx),1000, ScanFilter::None).await.unwrap();
     ///     while let Some(devices) = rx.recv().await {
     ///         println!("Discovered {devices:?}");
     ///     }
@@ -499,11 +499,13 @@ impl Handler {
     /// ```no_run
     /// use tauri::async_runtime;
     /// use uuid::{Uuid,uuid};
+    /// use tauri_plugin_blec::models::WriteType;
+    ///
     /// const CHARACTERISTIC_UUID: Uuid = uuid!("51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B");
     /// async_runtime::block_on(async {
     ///     let handler = tauri_plugin_blec::get_handler().unwrap();
     ///     let data = [1,2,3,4,5];
-    ///     let response = handler.lock().await.send_data(CHARACTERISTIC_UUID,&data).await.unwrap();
+    ///     let response = handler.send_data(CHARACTERISTIC_UUID,&data, WriteType::WithResponse).await.unwrap();
     /// });
     /// ```
     pub async fn send_data(
@@ -532,7 +534,7 @@ impl Handler {
     /// const CHARACTERISTIC_UUID: Uuid = uuid!("51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B");
     /// async_runtime::block_on(async {
     ///     let handler = tauri_plugin_blec::get_handler().unwrap();
-    ///     let response = handler.lock().await.recv_data(CHARACTERISTIC_UUID).await.unwrap();
+    ///     let response = handler.recv_data(CHARACTERISTIC_UUID).await.unwrap();
     /// });
     /// ```
     pub async fn recv_data(&self, c: Uuid) -> Result<Vec<u8>, Error> {
@@ -556,7 +558,7 @@ impl Handler {
     /// const CHARACTERISTIC_UUID: Uuid = uuid!("51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B");
     /// async_runtime::block_on(async {
     ///     let handler = tauri_plugin_blec::get_handler().unwrap();
-    ///     let response = handler.lock().await.subscribe(CHARACTERISTIC_UUID,|data| println!("received {data:?}")).await.unwrap();
+    ///     let response = handler.subscribe(CHARACTERISTIC_UUID,|data| println!("received {data:?}")).await.unwrap();
     /// });
     /// ```
     pub async fn subscribe(

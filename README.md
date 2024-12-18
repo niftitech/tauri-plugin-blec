@@ -64,7 +64,7 @@ let address = ...
 await connect(address, () => console.log('disconnected'))
 // send some text to a characteristic
 const CHARACTERISTIC_UUID = '51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B'
-await sendString(CHARACTERISTIC_UUID, 'Test')
+await sendString(CHARACTERISTIC_UUID, 'Test', 'withResponse')
 ```
 
 ## Usage in Backend
@@ -75,14 +75,13 @@ This means if you connect from the frontend you can send data from rust without 
 
 ```rs
 use uuid::{uuid, Uuid};
+use tauri_plugin_blec::models::WriteType;
 
 const CHARACTERISTIC_UUID: Uuid = uuid!("51FF12BB-3ED8-46E5-B4F9-D64E2FEC021B");
 const DATA: [u8; 500] = [0; 500];
 let handler = tauri_plugin_blec::get_handler().unwrap();
 handler
-    .lock()
-    .await
-    .send_data(CHARACTERISTIC_UUID, &DATA)
+    .send_data(CHARACTERISTIC_UUID, &DATA, WriteType::WithResponse)
     .await
     .unwrap();
 ```
