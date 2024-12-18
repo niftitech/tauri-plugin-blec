@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install tauri dependencies
-      run: sudo apt-get update && suda apt-get install -y apt install libwebkit2gtk-4.1-dev \
+      run: sudo apt-get update && sudo apt-get install -y apt install libwebkit2gtk-4.1-dev \
         build-essential \
         curl \
         wget \
