@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::error::Result;
 use crate::get_handler;
-use crate::models::BleDevice;
+use crate::models::{BleDevice, ScanFilter, WriteType};
 
 #[command]
 pub(crate) async fn scan<R: Runtime>(
@@ -24,7 +24,9 @@ pub(crate) async fn scan<R: Runtime>(
                 .expect("failed to send device to the front-end");
         }
     });
-    handler.lock().await.discover(Some(tx), timeout).await?;
+    handler
+        .discover(Some(tx), timeout, ScanFilter::None)
+        .await?;
     Ok(())
 }
 
@@ -32,7 +34,7 @@ pub(crate) async fn scan<R: Runtime>(
 pub(crate) async fn stop_scan<R: Runtime>(_app: AppHandle<R>) -> Result<()> {
     tracing::info!("Stopping BLE scan");
     let handler = get_handler()?;
-    handler.lock().await.stop_scan().await?;
+    handler.stop_scan().await?;
     Ok(())
 }
 
@@ -43,13 +45,15 @@ pub(crate) async fn connect<R: Runtime>(
     on_disconnect: Channel<()>,
 ) -> Result<()> {
     tracing::info!("Connecting to BLE device: {:?}", address);
-    let mut handler = get_handler()?.lock().await;
+    let handler = get_handler()?;
     let disconnct_handler = move || {
         on_disconnect
             .send(())
             .expect("failed to send disconnect event to the front-end");
     };
-    handler.connect(address, Some(disconnct_handler)).await?;
+    handler
+        .connect(&address, Some(Box::new(disconnct_handler)))
+        .await?;
     Ok(())
 }
 
@@ -57,7 +61,7 @@ pub(crate) async fn connect<R: Runtime>(
 pub(crate) async fn disconnect<R: Runtime>(_app: AppHandle<R>) -> Result<()> {
     tracing::info!("Disconnecting from BLE device");
     let handler = get_handler()?;
-    handler.lock().await.disconnect().await?;
+    handler.disconnect().await?;
     Ok(())
 }
 
@@ -68,9 +72,9 @@ pub(crate) async fn connection_state<R: Runtime>(
 ) -> Result<()> {
     let handler = get_handler()?;
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    handler.lock().await.set_connection_update_channel(tx);
+    handler.set_connection_update_channel(tx).await;
     update
-        .send(handler.lock().await.is_connected())
+        .send(handler.is_connected())
         .expect("failed to send connection state");
     async_runtime::spawn(async move {
         while let Some(connected) = rx.recv().await {
@@ -89,9 +93,9 @@ pub(crate) async fn scanning_state<R: Runtime>(
 ) -> Result<()> {
     let handler = get_handler()?;
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    handler.lock().await.set_scanning_update_channel(tx);
+    handler.set_scanning_update_channel(tx).await;
     update
-        .send(handler.lock().await.is_scanning())
+        .send(handler.is_scanning().await)
         .expect("failed to send scanning state");
     async_runtime::spawn(async move {
         while let Some(scanning) = rx.recv().await {
@@ -108,21 +112,18 @@ pub(crate) async fn send<R: Runtime>(
     _app: AppHandle<R>,
     characteristic: Uuid,
     data: Vec<u8>,
+    write_type: WriteType,
 ) -> Result<()> {
     info!("Sending data: {data:?}");
     let handler = get_handler()?;
-    handler
-        .lock()
-        .await
-        .send_data(characteristic, &data)
-        .await?;
+    handler.send_data(characteristic, &data, write_type).await?;
     Ok(())
 }
 
 #[command]
 pub(crate) async fn recv<R: Runtime>(_app: AppHandle<R>, characteristic: Uuid) -> Result<Vec<u8>> {
     let handler = get_handler()?;
-    let data = handler.lock().await.recv_data(characteristic).await?;
+    let data = handler.recv_data(characteristic).await?;
     Ok(data)
 }
 
@@ -131,9 +132,10 @@ pub(crate) async fn send_string<R: Runtime>(
     app: AppHandle<R>,
     characteristic: Uuid,
     data: String,
+    write_type: WriteType,
 ) -> Result<()> {
     let data = data.as_bytes().to_vec();
-    send(app, characteristic, data).await
+    send(app, characteristic, data, write_type).await
 }
 
 #[command]
@@ -149,8 +151,6 @@ async fn subscribe_channel(characteristic: Uuid) -> Result<mpsc::Receiver<Vec<u8
     let handler = get_handler()?;
     let (tx, rx) = tokio::sync::mpsc::channel(1);
     handler
-        .lock()
-        .await
         .subscribe(characteristic, move |data| {
             info!("subscribe_channel: {:?}", data);
             tx.try_send(data.to_vec())
@@ -201,7 +201,7 @@ pub(crate) async fn unsubscribe<R: Runtime>(
     characteristic: Uuid,
 ) -> Result<()> {
     let handler = get_handler()?;
-    handler.lock().await.unsubscribe(characteristic).await?;
+    handler.unsubscribe(characteristic).await?;
     Ok(())
 }
 

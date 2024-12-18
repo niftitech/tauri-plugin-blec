@@ -28,6 +28,11 @@ pub enum Error {
     #[error("no bluetooth adapters found")]
     NoAdapters,
 
+    #[error("Unknonwn error during disconnect")]
+    DisconnectFailed,
+
+    #[error("Unknown error during connect")]
+    ConnectionFailed,
     #[cfg(target_os = "android")]
     #[error(transparent)]
     PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),

@@ -4,6 +4,8 @@ export type BleDevice = {
   address: string;
   name: string;
   isConnected: boolean;
+  services: string[];
+  manufacturerData: Record<number, Uint8Array>;
 };
 
 /**
@@ -74,7 +76,6 @@ export async function connect(address: string, onDisconnect: (() => void) | null
     })
   } catch (e) {
     console.error(e)
-    await disconnect()
   }
 }
 
@@ -83,10 +84,11 @@ export async function connect(address: string, onDisconnect: (() => void) | null
  * @param characteristic UUID of the characteristic to write to
  * @param data Data to write to the characteristic
  */
-export async function send(characteristic: string, data: Uint8Array) {
+export async function send(characteristic: string, data: Uint8Array, writeType: 'withResponse' | 'withoutResponse' = 'withResponse') {
   await invoke('plugin:blec|send', {
     characteristic,
-    data
+    data,
+    writeType,
   })
 }
 
@@ -95,10 +97,11 @@ export async function send(characteristic: string, data: Uint8Array) {
  * @param characteristic UUID of the characteristic to write to
  * @param data Data to write to the characteristic
  */
-export async function sendString(characteristic: string, data: string) {
+export async function sendString(characteristic: string, data: string, writeType: 'withResponse' | 'withoutResponse' = 'withResponse') {
   await invoke('plugin:blec|send_string', {
     characteristic,
-    data
+    data,
+    writeType,
   })
 }
 

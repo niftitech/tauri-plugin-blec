@@ -5,7 +5,6 @@ import { BleDevice, getConnectionUpdates, startScan, sendString, readString, uns
 import { onMounted, ref } from 'vue';
 import BleDev from './components/BleDev.vue'
 import { invoke } from '@tauri-apps/api/core'
-import { BarLoader } from '@saeris/vue-spinners'
 
 
 const devices = ref<BleDevice[]>([])
@@ -46,6 +45,8 @@ async function test() {
     console.error(e)
   }
 }
+
+const showServices = ref(false);
 </script>
 
 <template>
@@ -87,9 +88,14 @@ async function test() {
         <button class="ml" :onclick="subscribe">{{ notifyData ? "Unsubscribe" : "Subscribe" }}</button>
       </div>
     </div>
-    <div v-else v-for="device in devices" class="row">
-      <BleDev :key="device.address" :device="device"
-        :onclick="() => connect(device.address, () => console.log('disconnected'))" />
+    <div v-else>
+      <label id="show-services-label" for="show-services">Show Services</label>
+      <input v-model="showServices" type="checkbox" id="show-services" />
+      <div v-for="device in devices" class="row">
+        <BleDev :key="device.address" :device="device"
+          :show-services="showServices" 
+          :onclick="() => connect(device.address, () => console.log('disconnected'))" />
+      </div>
     </div>
   </div>
 </template>
@@ -198,6 +204,16 @@ button {
 
 #greet-input {
   margin-right: 5px;
+}
+
+#show-services-label {
+  margin-top: 5px;
+  font-size: 1.3em;
+}
+#show-services {
+  margin: 5px;
+  height: 2em;
+  width: 2em;
 }
 
 :root {

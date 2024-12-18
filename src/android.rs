@@ -6,9 +6,9 @@ use btleplug::{
     },
     platform::PeripheralId,
 };
-use futures::{stream::Once, Stream};
+use futures::Stream;
 use once_cell::sync::{Lazy, OnceCell};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{
     collections::{BTreeSet, HashMap},
     pin::Pin,
@@ -17,7 +17,7 @@ use std::{
 use tauri::{
     ipc::{Channel, InvokeResponseBody},
     plugin::PluginHandle,
-    AppHandle, Manager as _, Wry,
+    AppHandle, Wry,
 };
 use tokio::sync::RwLock;
 use tokio_stream::wrappers::ReceiverStream;
@@ -69,6 +69,7 @@ fn on_device_callback(response: InvokeResponseBody) -> std::result::Result<(), t
     Ok(())
 }
 
+#[allow(dependency_on_unit_never_type_fallback)]
 #[async_trait]
 impl btleplug::api::Central for Adapter {
     type Peripheral = Peripheral;
@@ -156,6 +157,7 @@ impl Manager {
     }
 }
 
+#[allow(dependency_on_unit_never_type_fallback)]
 #[async_trait]
 impl btleplug::api::Manager for Manager {
     type Adapter = Adapter;
@@ -166,11 +168,16 @@ impl btleplug::api::Manager for Manager {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Peripheral {
     id: PeripheralId,
     address: BDAddr,
     name: String,
     rssi: i16,
+    #[serde(default)]
+    manufacturer_data: HashMap<u16, Vec<u8>>,
+    #[serde(default)]
+    services: Vec<Uuid>,
 }
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -190,6 +197,7 @@ struct ReadParams {
     characteristic: Uuid,
 }
 
+#[allow(dependency_on_unit_never_type_fallback)]
 #[async_trait::async_trait]
 impl btleplug::api::Peripheral for Peripheral {
     fn id(&self) -> PeripheralId {
@@ -205,7 +213,14 @@ impl btleplug::api::Peripheral for Peripheral {
             address: self.address,
             local_name: Some(self.name.clone()),
             rssi: Some(self.rssi),
-            ..Default::default()
+            manufacturer_data: self.manufacturer_data.clone(),
+            services: self.services.clone(),
+            // TODO: implement the rest
+            // at the moment not used by the handler or BleDevice struct so we can return default values
+            address_type: Default::default(),
+            class: Default::default(),
+            tx_power_level: Default::default(),
+            service_data: Default::default(),
         }))
     }
 
@@ -262,7 +277,6 @@ impl btleplug::api::Peripheral for Peripheral {
                 characteristics,
             });
         }
-        info!("services: {services:?}");
         services
     }
 
@@ -420,11 +434,11 @@ impl btleplug::api::Peripheral for Peripheral {
         Ok(Box::pin(stream))
     }
 
-    async fn write_descriptor(&self, descriptor: &Descriptor, data: &[u8]) -> Result<()> {
+    async fn write_descriptor(&self, _descriptor: &Descriptor, _data: &[u8]) -> Result<()> {
         todo!()
     }
 
-    async fn read_descriptor(&self, descriptor: &Descriptor) -> Result<Vec<u8>> {
+    async fn read_descriptor(&self, _descriptor: &Descriptor) -> Result<Vec<u8>> {
         todo!()
     }
 }

@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { BleDevice } from 'tauri-plugin-blec'
+import { BleDevice } from '@mnlphlp/plugin-blec'
 
-const props = defineProps<{
+defineProps<{
     device: BleDevice
+    showServices: boolean
 }>()
 
-console.log(props.device)
 </script>
 
 <template>
     <div class="box">
         <h1>{{ device.name }}</h1>
         <p>{{ device.address }}</p>
+        <div>
+            Manufacturer data:
+            <p v-for="[key, value] in Object.entries(device.manufacturerData)">{{ key }}: {{ value }}</p>
+        </div>
+        <div v-if="showServices">
+            Services: 
+            <p v-for="service in device.services">{{ service }}</p>
+        </div>
         <p>{{ device.isConnected ? "Connected" : "Not Connected" }}</p>
     </div>
 </template>
