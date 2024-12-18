@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::error;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BleDevice {
     pub address: String,
     pub name: String,

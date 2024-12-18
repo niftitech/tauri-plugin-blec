@@ -10,8 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@mnlphlp/plugin-blec": ">=0.3.2",
-    "@saeris/vue-spinners": "^1.0.8",
+    "@mnlphlp/plugin-blec": "file:../..",
     "@tauri-apps/api": ">=2.0.0",
     "@tauri-apps/plugin-log": "~2",
     "@tauri-apps/plugin-shell": ">=2.0.0",
@@ -20,8 +19,8 @@
   "devDependencies": {
     "@tauri-apps/cli": ">=2.0.0",
     "@vitejs/plugin-vue": "^5.0.5",
-    "typescript": "^5.2.2",
+    "typescript": "~5.6.3",
     "vite": "^5.3.1",
-    "vue-tsc": "^2.0.22"
+    "vue-tsc": "^2.1.10"
   }
 }

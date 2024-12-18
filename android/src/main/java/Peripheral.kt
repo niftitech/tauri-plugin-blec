@@ -119,7 +119,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             value: ByteArray,
             status: Int
         ) {
-            val id = characteristic?.uuid ?: return
+            val id = characteristic.uuid ?: return
             val invoke = this@Peripheral.onReadInvoke[id]!!
             if (status != BluetoothGatt.GATT_SUCCESS){
                 invoke.reject("Read from characteristic $id failed with status $status")
@@ -246,10 +246,6 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
         invoke.resolve(res)
     }
 
-    class Notification(
-        uuid: UUID,
-        data: Array<Byte>
-    )
     fun setNotifyChannel(channel: Channel){
         this.notifyChannel = channel;
     }

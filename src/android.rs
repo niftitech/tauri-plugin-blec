@@ -69,6 +69,7 @@ fn on_device_callback(response: InvokeResponseBody) -> std::result::Result<(), t
     Ok(())
 }
 
+#[allow(dependency_on_unit_never_type_fallback)]
 #[async_trait]
 impl btleplug::api::Central for Adapter {
     type Peripheral = Peripheral;
@@ -156,6 +157,7 @@ impl Manager {
     }
 }
 
+#[allow(dependency_on_unit_never_type_fallback)]
 #[async_trait]
 impl btleplug::api::Manager for Manager {
     type Adapter = Adapter;
@@ -195,6 +197,7 @@ struct ReadParams {
     characteristic: Uuid,
 }
 
+#[allow(dependency_on_unit_never_type_fallback)]
 #[async_trait::async_trait]
 impl btleplug::api::Peripheral for Peripheral {
     fn id(&self) -> PeripheralId {
@@ -432,7 +435,7 @@ impl btleplug::api::Peripheral for Peripheral {
         Ok(Box::pin(stream))
     }
 
-    async fn write_descriptor(&self, _descriptor: &Descriptor, data: &[u8]) -> Result<()> {
+    async fn write_descriptor(&self, _descriptor: &Descriptor, _data: &[u8]) -> Result<()> {
         todo!()
     }
 

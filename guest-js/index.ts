@@ -4,6 +4,8 @@ export type BleDevice = {
   address: string;
   name: string;
   isConnected: boolean;
+  services: string[];
+  manufacturerData: Record<number, Uint8Array>;
 };
 
 /**
