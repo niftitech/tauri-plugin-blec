@@ -29,8 +29,8 @@ struct HandlerState {
     characs: Vec<Characteristic>,
     listen_handle: Option<async_runtime::JoinHandle<()>>,
     on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
-    connection_update_channel: Option<mpsc::Sender<bool>>,
-    scan_update_channel: Option<mpsc::Sender<bool>>,
+    connection_update_channel: Vec<mpsc::Sender<bool>>,
+    scan_update_channel: Vec<mpsc::Sender<bool>>,
     scan_task: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -71,9 +71,9 @@ impl Handler {
             connected_dev: Mutex::new(None),
             state: Mutex::new(HandlerState {
                 on_disconnect: None,
-                connection_update_channel: None,
+                connection_update_channel: vec![],
                 scan_task: None,
-                scan_update_channel: None,
+                scan_update_channel: vec![],
                 listen_handle: None,
                 characs: vec![],
             }),
@@ -109,7 +109,7 @@ impl Handler {
     /// });
     /// ```
     pub async fn set_scanning_update_channel(&self, tx: mpsc::Sender<bool>) {
-        self.state.lock().await.scan_update_channel = Some(tx);
+        self.state.lock().await.scan_update_channel.push(tx);
     }
 
     /// Takes a sender that will be used to send changes in the connection status
@@ -127,7 +127,7 @@ impl Handler {
     /// });
     /// ```
     pub async fn set_connection_update_channel(&self, tx: mpsc::Sender<bool>) {
-        self.state.lock().await.connection_update_channel = Some(tx);
+        self.state.lock().await.connection_update_channel.push(tx);
     }
 
     /// Connects to the given address
@@ -146,7 +146,7 @@ impl Handler {
     /// });
     /// ```
     pub async fn connect(
-        &self,
+        &'static self,
         address: &str,
         on_disconnect: Option<Box<dyn Fn() + Send>>,
     ) -> Result<(), Error> {
@@ -241,12 +241,7 @@ impl Handler {
             }
         }
 
-        let state = self.state.lock().await;
-        if let Some(tx) = &state.connection_update_channel {
-            tx.send(true)
-                .await
-                .expect("failed to send connection update");
-        }
+        self.send_connection_update(true).await;
         Ok(())
     }
 
@@ -299,22 +294,22 @@ impl Handler {
             // event not for currently connected device, ignore
             return Ok(());
         }
-        debug!("locking state for disconnect");
-        let mut state = self.state.lock().await;
-        info!("disconnecting");
-        *dev = None;
-        if let Some(handle) = state.listen_handle.take() {
-            handle.abort();
+        {
+            debug!("locking state for disconnect");
+            let mut state = self.state.lock().await;
+            info!("disconnecting");
+            *dev = None;
+            if let Some(handle) = state.listen_handle.take() {
+                handle.abort();
+            }
+            *self.notify_listeners.lock().await = vec![];
+            if let Some(on_disconnect) = &state.on_disconnect {
+                let callback = on_disconnect.lock().await;
+                callback();
+            }
+            state.characs.clear();
         }
-        *self.notify_listeners.lock().await = vec![];
-        if let Some(on_disconnect) = &state.on_disconnect {
-            let callback = on_disconnect.lock().await;
-            callback();
-        }
-        if let Some(tx) = &state.connection_update_channel {
-            tx.send(false).await?;
-        }
-        state.characs.clear();
+        self.send_connection_update(false).await;
         self.connected_tx
             .send(false)
             .expect("failed to send connected update");
@@ -348,27 +343,27 @@ impl Handler {
     /// });
     /// ```
     pub async fn discover(
-        &self,
+        &'static self,
         tx: Option<mpsc::Sender<Vec<BleDevice>>>,
         timeout: u64,
         filter: ScanFilter,
     ) -> Result<(), Error> {
+        {
+            let mut state = self.state.lock().await;
+            // stop any ongoing scan
+            if let Some(handle) = state.scan_task.take() {
+                handle.abort();
+                self.adapter.stop_scan().await?;
+            }
+            // start a new scan
+            self.adapter
+                .start_scan(btleplug::api::ScanFilter::default())
+                .await?;
+        }
+        self.send_scan_update(true).await;
         let mut state = self.state.lock().await;
-        // stop any ongoing scan
-        if let Some(handle) = state.scan_task.take() {
-            handle.abort();
-            self.adapter.stop_scan().await?;
-        }
-        // start a new scan
-        self.adapter
-            .start_scan(btleplug::api::ScanFilter::default())
-            .await?;
-        if let Some(tx) = &state.scan_update_channel {
-            tx.send(true).await?;
-        }
         let mut self_devices = self.devices.clone();
         let adapter = self.adapter.clone();
-        let scan_update_channel = state.scan_update_channel.clone();
         state.scan_task = Some(tokio::task::spawn(async move {
             self_devices.lock().await.clear();
             let loops = timeout / 200;
@@ -390,9 +385,7 @@ impl Handler {
                 }
             }
             adapter.stop_scan().await.expect("failed to stop scan");
-            if let Some(tx) = &scan_update_channel {
-                tx.send(false).await.expect("failed to send scan update");
-            }
+            self.send_scan_update(false).await;
         }));
         Ok(())
     }
@@ -461,13 +454,10 @@ impl Handler {
     /// Returns an error if stopping the scan fails
     pub async fn stop_scan(&self) -> Result<(), Error> {
         self.adapter.stop_scan().await?;
-        let mut state = self.state.lock().await;
-        if let Some(handle) = state.scan_task.take() {
+        if let Some(handle) = self.state.lock().await.scan_task.take() {
             handle.abort();
         }
-        if let Some(tx) = &state.scan_update_channel {
-            tx.send(false).await?;
-        }
+        self.send_scan_update(false).await;
         Ok(())
     }
 
@@ -642,6 +632,28 @@ impl Handler {
             debug!(
                 "connect event for device {peripheral_id} received without waiting for connection"
             );
+        }
+    }
+
+    async fn send_connection_update(&self, state: bool) {
+        let tx = &mut self.state.lock().await.connection_update_channel;
+        let mut remove = vec![];
+        for (i, t) in tx.iter_mut().enumerate() {
+            if let Err(e) = t.send(state).await {
+                warn!("Failed to send connection update: {e}");
+                remove.push(i);
+            }
+        }
+    }
+
+    async fn send_scan_update(&self, state: bool) {
+        let tx = &mut self.state.lock().await.scan_update_channel;
+        let mut remove = vec![];
+        for (i, t) in tx.iter_mut().enumerate() {
+            if let Err(e) = t.send(state).await {
+                warn!("Failed to send scan update: {e}");
+                remove.push(i);
+            }
         }
     }
 }
