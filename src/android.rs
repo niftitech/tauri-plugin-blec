@@ -78,15 +78,11 @@ impl btleplug::api::Central for Adapter {
         let (tx, rx) = tokio::sync::mpsc::channel::<CentralEvent>(1);
         let stream = ReceiverStream::new(rx);
         let channel: Channel = Channel::new(move |response| {
-            match response.deserialize::<CentralEvent>() {
-                Ok(event) => tx
-                    .blocking_send(event)
-                    .expect("failed to send notification"),
-                Err(e) => {
-                    tracing::error!("failed to deserialize notification: {:?}", e);
-                    return Err(tauri::Error::from(e));
-                }
-            };
+            let event = response
+                .deserialize::<CentralEvent>()
+                .expect("failed to deserialize event");
+            tx.blocking_send(event)
+                .expect("failed to send notification");
             Ok(())
         });
         get_handle()

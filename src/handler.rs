@@ -289,16 +289,22 @@ impl Handler {
 
     /// Clears internal state, updates connected flag and calls disconnect callback
     async fn handle_disconnect(&self, peripheral_id: PeripheralId) -> Result<(), Error> {
-        let mut dev = self.connected_dev.lock().await;
-        if !dev.as_ref().is_some_and(|dev| dev.id() == peripheral_id) {
+        let connected = self
+            .connected_dev
+            .lock()
+            .await
+            .as_ref()
+            .map(btleplug::api::Peripheral::id);
+        if !connected.as_ref().is_some_and(|c| *c == peripheral_id) {
             // event not for currently connected device, ignore
+            warn!("Unexpected disconnect event for device {peripheral_id}, connected device is {connected:?}",);
             return Ok(());
         }
         {
             debug!("locking state for disconnect");
             let mut state = self.state.lock().await;
             info!("disconnecting");
-            *dev = None;
+            *self.connected_dev.lock().await = None;
             if let Some(handle) = state.listen_handle.take() {
                 handle.abort();
             }
