@@ -96,7 +96,7 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
 
     private fun checkPermissions(): Boolean {
 
-        for (perm in if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val permissions =  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT
@@ -106,7 +106,8 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
                 Manifest.permission.BLUETOOTH_ADMIN,
                 Manifest.permission.BLUETOOTH,
             )
-        }) {
+        };
+        for (perm in permissions){
             if (ActivityCompat.checkSelfPermission(
                     activity,
                     perm
@@ -115,7 +116,8 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
                 if (firstPermissionRequest(perm) || activity.shouldShowRequestPermissionRationale(perm)) {
                     // this will open the permission dialog
                     markFirstPermissionRequest(perm)
-                    activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+                    activity.requestPermissions(permissions, 1)
+                    return false
                 } else{
                     // this will open settings which asks for permission
                     val intent = Intent(
