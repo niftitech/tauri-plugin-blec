@@ -106,17 +106,19 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             status: Int
         ) {
             val id = characteristic?.uuid ?: return
-            val invoke = this@Peripheral.onWriteInvoke[id]
-            if (invoke == null) {
-                Log.e("Peripheral","Did not find tauri invoke obj for write on $id")
-            }else{
-                if (status != BluetoothGatt.GATT_SUCCESS) {
-                    invoke.reject("Write to characteristic $id failed with status $status")
+            synchronized(this@Peripheral.onWriteInvoke) {
+                val invoke = this@Peripheral.onWriteInvoke[id]
+                if (invoke == null) {
+                    Log.e("Peripheral", "Did not find tauri invoke obj for write on $id")
                 } else {
-                    invoke.resolve()
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        invoke.reject("Write to characteristic $id failed with status $status")
+                    } else {
+                        invoke.resolve()
+                    }
                 }
+                this@Peripheral.onWriteInvoke.remove(id)
             }
-            this@Peripheral.onWriteInvoke.remove(id)
         }
 
         override fun onCharacteristicRead(
@@ -126,19 +128,21 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             status: Int
         ) {
             val id = characteristic.uuid ?: return
-            val invoke = this@Peripheral.onReadInvoke[id]
-            if (invoke == null) {
-                Log.e("Peripheral","Did not find tauri invoke obj for read on $id")
-            }else{
-                if (status != BluetoothGatt.GATT_SUCCESS) {
-                    invoke.reject("Read from characteristic $id failed with status $status")
+            synchronized(this@Peripheral.onReadInvoke) {
+                val invoke = this@Peripheral.onReadInvoke[id]
+                if (invoke == null) {
+                    Log.e("Peripheral", "Did not find tauri invoke obj for read on $id")
                 } else {
-                    val res = JSObject()
-                    res.put("value", bytesToJson(value))
-                    invoke.resolve(res)
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        invoke.reject("Read from characteristic $id failed with status $status")
+                    } else {
+                        val res = JSObject()
+                        res.put("value", bytesToJson(value))
+                        invoke.resolve(res)
+                    }
                 }
+                this@Peripheral.onReadInvoke.remove(id)
             }
-            this@Peripheral.onReadInvoke.remove(id)
         }
 
         override fun onDescriptorWrite(
@@ -278,8 +282,8 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             if (this.onWriteInvoke[args.characteristic] != null) {
                 this.onWriteInvoke[args.characteristic]!!.reject("write was overwritten before finishing")
             }
+            this.onWriteInvoke[args.characteristic] = invoke
         }
-        this.onWriteInvoke[args.characteristic] = invoke
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             gatt.writeCharacteristic(charac,args.data!!,if (args.withResponse){BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT}else{BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE})
         } else {
