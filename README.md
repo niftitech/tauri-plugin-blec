@@ -38,6 +38,11 @@ tauri::Builder::default()
     .expect("error while running tauri application");
 ```
 
+### Allow calls from Frontend
+Add `blec:default` to the permissions in your capabilities file.
+
+[Explanation about capabilities](https://v2.tauri.app/security/capabilities/)
+
 ### IOS Setup
 Add an entry to the info.plist of your app:
 ```xml
