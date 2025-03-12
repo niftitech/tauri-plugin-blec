@@ -16,6 +16,10 @@ defineProps<{
             Manufacturer data:
             <p v-for="[key, value] in Object.entries(device.manufacturerData)">{{ key }}: {{ value }}</p>
         </div>
+        <div>
+            Service data:
+            <p v-for="[key, value] in Object.entries(device.serviceData)">{{ key }}: {{ value }}</p>
+        </div>
         <div v-if="showServices">
             Services: 
             <p v-for="service in device.services">{{ service }}</p>
