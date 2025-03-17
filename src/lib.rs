@@ -15,6 +15,7 @@ pub mod models;
 
 pub use error::Error;
 pub use handler::Handler;
+pub use handler::OnDisconnectHandler;
 
 static HANDLER: OnceCell<Handler> = OnceCell::new();
 

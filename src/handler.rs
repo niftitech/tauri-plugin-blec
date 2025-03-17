@@ -28,7 +28,7 @@ struct Listener {
 struct HandlerState {
     characs: Vec<Characteristic>,
     listen_handle: Option<async_runtime::JoinHandle<()>>,
-    on_disconnect: Option<Mutex<Box<dyn Fn() + Send>>>,
+    on_disconnect: OnDisconnectHandler,
     connection_update_channel: Vec<mpsc::Sender<bool>>,
     scan_update_channel: Vec<mpsc::Sender<bool>>,
     scan_task: Option<tokio::task::JoinHandle<()>>,
@@ -58,6 +58,38 @@ async fn get_central() -> Result<Adapter, Error> {
     Ok(central)
 }
 
+pub enum OnDisconnectHandler {
+    None,
+    Sync(Box<dyn FnOnce() + Send>),
+    Async(futures::future::BoxFuture<'static, ()>),
+}
+impl OnDisconnectHandler {
+    async fn run(self) {
+        match self {
+            OnDisconnectHandler::None => {}
+            OnDisconnectHandler::Sync(f) => f(),
+            OnDisconnectHandler::Async(f) => f.await,
+        }
+    }
+
+    #[must_use]
+    pub fn take(&mut self) -> Self {
+        std::mem::replace(self, OnDisconnectHandler::None)
+    }
+}
+
+impl<F: FnOnce() + Send + 'static> From<F> for OnDisconnectHandler {
+    fn from(func: F) -> Self {
+        OnDisconnectHandler::Sync(Box::new(func))
+    }
+}
+
+impl From<futures::future::BoxFuture<'static, ()>> for OnDisconnectHandler {
+    fn from(future: futures::future::BoxFuture<'static, ()>) -> Self {
+        OnDisconnectHandler::Async(future)
+    }
+}
+
 impl Handler {
     pub(crate) async fn new() -> Result<Self, Error> {
         let central = get_central().await?;
@@ -70,7 +102,7 @@ impl Handler {
             connected_tx,
             connected_dev: Mutex::new(None),
             state: Mutex::new(HandlerState {
-                on_disconnect: None,
+                on_disconnect: OnDisconnectHandler::None,
                 connection_update_channel: vec![],
                 scan_task: None,
                 scan_update_channel: vec![],
@@ -148,7 +180,7 @@ impl Handler {
     pub async fn connect(
         &'static self,
         address: &str,
-        on_disconnect: Option<Box<dyn Fn() + Send>>,
+        on_disconnect: OnDisconnectHandler,
     ) -> Result<(), Error> {
         if self.devices.lock().await.len() == 0 {
             self.discover(None, 1000, ScanFilter::None).await?;
@@ -179,9 +211,7 @@ impl Handler {
         }
         let mut state = self.state.lock().await;
         // set callback to run on disconnect
-        if let Some(cb) = on_disconnect {
-            state.on_disconnect = Some(Mutex::new(cb));
-        }
+        state.on_disconnect = on_disconnect;
         // discover service/characteristics
         self.connect_services(&mut state).await?;
         // start background task for notifications
@@ -309,10 +339,7 @@ impl Handler {
                 handle.abort();
             }
             *self.notify_listeners.lock().await = vec![];
-            if let Some(on_disconnect) = &state.on_disconnect {
-                let callback = on_disconnect.lock().await;
-                callback();
-            }
+            state.on_disconnect.take().run().await;
             state.characs.clear();
         }
         self.send_connection_update(false).await;

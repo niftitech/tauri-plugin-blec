@@ -5,8 +5,8 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::error::Result;
-use crate::get_handler;
 use crate::models::{BleDevice, ScanFilter, WriteType};
+use crate::{get_handler, OnDisconnectHandler};
 
 #[command]
 pub(crate) async fn scan<R: Runtime>(
@@ -51,9 +51,7 @@ pub(crate) async fn connect<R: Runtime>(
             .send(())
             .expect("failed to send disconnect event to the front-end");
     };
-    handler
-        .connect(&address, Some(Box::new(disconnct_handler)))
-        .await?;
+    handler.connect(&address, disconnct_handler.into()).await?;
     Ok(())
 }
 
