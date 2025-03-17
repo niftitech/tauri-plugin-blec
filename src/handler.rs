@@ -174,7 +174,7 @@ impl Handler {
     /// use tauri::async_runtime;
     /// async_runtime::block_on(async {
     ///    let handler = tauri_plugin_blec::get_handler().unwrap();
-    ///    handler.connect("00:00:00:00:00:00", Some(Box::new(|| println!("disconnected")))).await.unwrap();
+    ///    handler.connect("00:00:00:00:00:00", (|| println!("disconnected")).into()).await.unwrap();
     /// });
     /// ```
     pub async fn connect(

@@ -5,8 +5,8 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::error::Result;
+use crate::get_handler;
 use crate::models::{BleDevice, ScanFilter, WriteType};
-use crate::{get_handler, OnDisconnectHandler};
 
 #[command]
 pub(crate) async fn scan<R: Runtime>(
