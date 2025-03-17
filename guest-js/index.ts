@@ -3,6 +3,7 @@ import { Channel, invoke } from '@tauri-apps/api/core'
 export type BleDevice = {
   address: string;
   name: string;
+  rssi: number;
   isConnected: boolean;
   services: string[];
   manufacturerData: Record<number, Uint8Array>;
