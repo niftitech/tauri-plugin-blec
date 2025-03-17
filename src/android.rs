@@ -173,6 +173,8 @@ pub struct Peripheral {
     #[serde(default)]
     manufacturer_data: HashMap<u16, Vec<u8>>,
     #[serde(default)]
+    service_data: HashMap<Uuid, Vec<u8>>,
+    #[serde(default)]
     services: Vec<Uuid>,
 }
 #[derive(serde::Serialize)]
@@ -210,13 +212,13 @@ impl btleplug::api::Peripheral for Peripheral {
             local_name: Some(self.name.clone()),
             rssi: Some(self.rssi),
             manufacturer_data: self.manufacturer_data.clone(),
+            service_data: self.service_data.clone(),
             services: self.services.clone(),
             // TODO: implement the rest
             // at the moment not used by the handler or BleDevice struct so we can return default values
             address_type: Default::default(),
             class: Default::default(),
             tx_power_level: Default::default(),
-            service_data: Default::default(),
         }))
     }
 

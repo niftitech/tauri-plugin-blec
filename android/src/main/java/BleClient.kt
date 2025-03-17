@@ -38,6 +38,7 @@ class BleDevice(
     private val rssi: Int,
     private val connected: Boolean,
     private val manufacturerData: SparseArray<ByteArray>?,
+    private val serviceData: Map<ParcelUuid, ByteArray>?,
     private val services: List<ParcelUuid>?
 ){
     fun toJsObject():JSObject{
@@ -74,6 +75,21 @@ class BleDevice(
             subObj
         } else { null }
         obj.put("manufacturerData",manufacturerData)
+        // crate object from serviceData
+        val serviceData = if (serviceData != null) {
+            val subObj = JSObject()
+            for ((key, value) in serviceData){
+                val arr = JSArray()
+                for (element in value){
+                    // toInt is needed to generate number in Json
+                    // the UByte is serialized as string
+                    arr.put(element.toUByte().toInt())
+                }
+                subObj.put(key.toString(),arr)
+            }
+            subObj
+        } else { null }
+        obj.put("serviceData",serviceData)
         return obj
     }
 }
@@ -202,6 +218,7 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
                     result.rssi,
                     connected,
                     result.scanRecord?.manufacturerSpecificData,
+                    result.scanRecord?.serviceData,
                     result.scanRecord?.serviceUuids
                 )
                 this@BleClient.plugin.devices[device.address] = Peripheral(this@BleClient.activity, result.device, this@BleClient.plugin)
