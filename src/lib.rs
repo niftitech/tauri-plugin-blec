@@ -46,6 +46,16 @@ pub fn get_handler() -> error::Result<&'static Handler> {
     Ok(handler)
 }
 
+/// Checks if the app has the necessary permissions to use BLE.
+/// # Errors
+/// Returns an error if calling the android plugin fails.
+pub fn check_permissions() -> Result<bool, Error> {
+    #[cfg(target_os = "android")]
+    return Ok(android::check_permissions()?);
+    #[cfg(not(target_os = "android"))]
+    return Ok(true);
+}
+
 async fn handle_events() {
     let handler = get_handler().expect("failed to get handler");
     let stream = handler

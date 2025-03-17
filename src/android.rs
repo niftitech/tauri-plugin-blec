@@ -69,6 +69,12 @@ fn on_device_callback(response: InvokeResponseBody) -> std::result::Result<(), t
     Ok(())
 }
 
+pub fn check_permissions() -> std::result::Result<bool, tauri::plugin::mobile::PluginInvokeError> {
+    let result: BoolResult =
+        get_handle().run_mobile_plugin("check_permissions", serde_json::Value::Null)?;
+    Ok(result.result)
+}
+
 #[allow(dependency_on_unit_never_type_fallback)]
 #[async_trait]
 impl btleplug::api::Central for Adapter {

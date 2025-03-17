@@ -203,6 +203,11 @@ pub(crate) async fn unsubscribe<R: Runtime>(
     Ok(())
 }
 
+#[command]
+pub(crate) fn check_permissions() -> Result<bool> {
+    crate::check_permissions()
+}
+
 pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
     tauri::generate_handler![
         scan,
@@ -217,6 +222,7 @@ pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
         subscribe,
         subscribe_string,
         unsubscribe,
-        scanning_state
+        scanning_state,
+        check_permissions
     ]
 }

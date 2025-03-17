@@ -36,6 +36,14 @@ export async function stopScan() {
 }
 
 /**
+  * Check if necessary permissions are granted
+  * @returns true if permissions are granted, false otherwise
+  */
+export async function checkPermissions(): Promise<boolean> {
+  return await invoke<boolean>('plugin:blec|check_permissions')
+}
+
+/**
   * Register a handler to receive updates when the connection state changes
 */
 export async function getConnectionUpdates(handler: (connected: boolean) => void) {

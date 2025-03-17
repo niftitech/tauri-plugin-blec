@@ -170,4 +170,12 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
         }
         device.subscribe(invoke,false)
     }
+
+    @Command
+    fun check_permissions(invoke: Invoke){
+        val granted = client.checkPermissions();
+        val ret = JSObject();
+        ret.put("result",granted)
+        invoke.resolve(ret);
+    }
 }

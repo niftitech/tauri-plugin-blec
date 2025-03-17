@@ -110,7 +110,7 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
             .getBoolean(perm, true)
     }
 
-    private fun checkPermissions(): Boolean {
+    public fun checkPermissions(): Boolean {
 
         val permissions =  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
