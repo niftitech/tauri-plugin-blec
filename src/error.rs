@@ -33,6 +33,10 @@ pub enum Error {
 
     #[error("Unknown error during connect")]
     ConnectionFailed,
+
+    #[error("Mask must match manufacturer data length")]
+    InvalidFilterMask,
+
     #[cfg(target_os = "android")]
     #[error(transparent)]
     PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),

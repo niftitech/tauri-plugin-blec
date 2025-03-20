@@ -178,4 +178,7 @@ pub enum ScanFilter {
     AllServices(Vec<Uuid>),
     /// Matches if the device advertises the specified manufacturer data.
     ManufacturerData(u16, Vec<u8>),
+    /// Matches if the device advertises the specified manufacturer data, checking only the bits
+    /// that are 1 in the mask
+    ManufacturerDataMasked(u16, Vec<u8>, Vec<u8>),
 }

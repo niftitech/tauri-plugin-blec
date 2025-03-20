@@ -60,7 +60,7 @@ fn on_device_callback(response: InvokeResponseBody) -> std::result::Result<(), t
         }
     };
     let mut devices = DEVICES.blocking_write();
-    tracing::info!("device: {device:?}");
+    tracing::trace!("device: {device:?}");
     if let Some(enty) = devices.get_mut(&device.id) {
         *enty = device;
     } else {

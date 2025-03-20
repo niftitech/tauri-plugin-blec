@@ -381,6 +381,11 @@ impl Handler {
         timeout: u64,
         filter: ScanFilter,
     ) -> Result<(), Error> {
+        if let ScanFilter::ManufacturerDataMasked(_, ref data, ref mask) = filter {
+            if data.len() != mask.len() {
+                return Err(Error::InvalidFilterMask);
+            }
+        }
         {
             let mut state = self.state.lock().await;
             // stop any ongoing scan
@@ -724,6 +729,20 @@ async fn filter_peripherals(discovered: &mut Vec<Peripheral>, filter: &ScanFilte
                     .manufacturer_data
                     .get(key)
                     .is_some_and(|v| v == value)
+                {
+                    remove.push(p.0);
+                }
+            }
+            ScanFilter::ManufacturerDataMasked(key, value, maks) => {
+                let Some(data) = properties.manufacturer_data.get(key) else {
+                    remove.push(p.0);
+                    continue;
+                };
+                if !data
+                    .iter()
+                    .zip(maks.iter())
+                    .zip(value.iter())
+                    .all(|((d, m), v)| (d & m) == (*v & m))
                 {
                     remove.push(p.0);
                 }
