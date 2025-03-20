@@ -19,7 +19,7 @@ import java.util.UUID
 private fun bytesToJson(bytes: ByteArray):JSONArray{
     val array = JSONArray()
     for (byte in bytes){
-        array.put((byte))
+        array.put((byte.toUByte().toInt()))
     }
     return array
 }
