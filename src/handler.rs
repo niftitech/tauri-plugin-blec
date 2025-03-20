@@ -707,6 +707,11 @@ async fn filter_peripherals(discovered: &mut Vec<Peripheral>, filter: &ScanFilte
             remove.push(p.0);
             continue;
         };
+        if properties.rssi.is_none() {
+            // ignore not available devices
+            remove.push(p.0);
+            continue;
+        }
         match filter {
             ScanFilter::None => unreachable!("Earyl return for no filter"),
             ScanFilter::Service(uuid) => {
