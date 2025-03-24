@@ -235,7 +235,6 @@ class BleClient(private val activity: Activity, private val plugin: BleClientPlu
 
     @SuppressLint("MissingPermission")
     fun stopScan(invoke: Invoke){
-        println("stopScan")
         if (scanCb!=null) {
             scanner?.stopScan(scanCb!!)
             scanCb = null
