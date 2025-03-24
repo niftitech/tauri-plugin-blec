@@ -149,9 +149,9 @@ async fn subscribe_channel(characteristic: Uuid) -> Result<mpsc::Receiver<Vec<u8
     let handler = get_handler()?;
     let (tx, rx) = tokio::sync::mpsc::channel(1);
     handler
-        .subscribe(characteristic, move |data| {
+        .subscribe(characteristic, move |data: Vec<u8>| {
             info!("subscribe_channel: {:?}", data);
-            tx.try_send(data.to_vec())
+            tx.try_send(data)
                 .expect("failed to send data to the channel");
         })
         .await?;

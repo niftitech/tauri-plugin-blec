@@ -19,10 +19,9 @@ use crate::android::{Adapter, Manager, Peripheral};
 #[cfg(not(target_os = "android"))]
 use btleplug::platform::{Adapter, Manager, Peripheral};
 
-type ListenerCallback = Arc<dyn Fn(&[u8]) + Send + Sync>;
 struct Listener {
     uuid: Uuid,
-    callback: ListenerCallback,
+    callback: SubscriptionHandler,
 }
 
 struct HandlerState {
@@ -87,6 +86,38 @@ impl<F: FnOnce() + Send + 'static> From<F> for OnDisconnectHandler {
 impl From<futures::future::BoxFuture<'static, ()>> for OnDisconnectHandler {
     fn from(future: futures::future::BoxFuture<'static, ()>) -> Self {
         OnDisconnectHandler::Async(future)
+    }
+}
+
+#[derive(Clone)]
+#[allow(clippy::type_complexity)]
+pub enum SubscriptionHandler {
+    Sync(Arc<dyn Fn(Vec<u8>) + Send + Sync + 'static>),
+    ASync(
+        Arc<dyn (Fn(Vec<u8>) -> futures::future::BoxFuture<'static, ()>) + Send + Sync + 'static>,
+    ),
+}
+
+impl SubscriptionHandler {
+    pub fn from_async(
+        func: impl (Fn(Vec<u8>) -> futures::future::BoxFuture<'static, ()>) + Send + Sync + 'static,
+    ) -> Self {
+        SubscriptionHandler::ASync(Arc::new(func))
+    }
+
+    async fn run(self, data: Vec<u8>) {
+        match self {
+            SubscriptionHandler::Sync(f) => tokio::task::spawn_blocking(move || f(data))
+                .await
+                .expect("failed to run sync callback"),
+            SubscriptionHandler::ASync(f) => f(data).await,
+        }
+    }
+}
+
+impl<F: Fn(Vec<u8>) + Send + Sync + 'static> From<F> for SubscriptionHandler {
+    fn from(func: F) -> Self {
+        SubscriptionHandler::Sync(Arc::new(func))
     }
 }
 
@@ -592,7 +623,7 @@ impl Handler {
     pub async fn subscribe(
         &self,
         c: Uuid,
-        callback: impl Fn(&[u8]) + Send + Sync + 'static,
+        callback: impl Into<SubscriptionHandler>,
     ) -> Result<(), Error> {
         let dev = self.connected_dev.lock().await;
         let dev = dev.as_ref().ok_or(Error::NoDeviceConnected)?;
@@ -601,7 +632,7 @@ impl Handler {
         dev.subscribe(charac).await?;
         self.notify_listeners.lock().await.push(Listener {
             uuid: charac.uuid,
-            callback: Arc::new(callback),
+            callback: callback.into(),
         });
         Ok(())
     }
@@ -770,7 +801,6 @@ async fn listen_notify(dev: Option<Peripheral>, listeners: Arc<Mutex<Vec<Listene
     while let Some(data) = stream.next().await {
         for l in listeners.lock().await.iter() {
             if l.uuid == data.uuid {
-                let data = data.value.clone();
                 let cb = l.callback.clone();
                 // wait for running callback first
                 if let Some(handle) = handles.remove(&l.uuid) {
@@ -779,12 +809,7 @@ async fn listen_notify(dev: Option<Peripheral>, listeners: Arc<Mutex<Vec<Listene
                 }
                 // insert new callback
                 trace!("starting new callback for {:?}", l.uuid);
-                handles.insert(
-                    l.uuid,
-                    tokio::task::spawn_blocking(move || {
-                        cb(&data);
-                    }),
-                );
+                handles.insert(l.uuid, tokio::task::spawn(cb.run(data.value.clone())));
             }
         }
     }

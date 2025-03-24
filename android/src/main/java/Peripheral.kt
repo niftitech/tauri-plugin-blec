@@ -83,13 +83,14 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            if (this@Peripheral.notifyChannel == null){
-                return
+            this@Peripheral.notifyChannel?.let {
+                synchronized(it){
+                    val notification = JSObject();
+                    notification.put("uuid",characteristic.uuid)
+                    notification.put("data",base64Encoder.encodeToString(value))
+                    it.send(notification)
+                }
             }
-            val notification = JSObject();
-            notification.put("uuid",characteristic.uuid)
-            notification.put("data",base64Encoder.encodeToString(value))
-            this@Peripheral.notifyChannel!!.send(notification)
         }
 
         override fun onCharacteristicWrite(
@@ -248,7 +249,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
                 characs
             ).toJson())
         }
-        var res = JSObject()
+        val res = JSObject()
         res.put("result",services)
         invoke.resolve(res)
     }
