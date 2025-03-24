@@ -83,11 +83,9 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            println("Charactersitic changed")
             if (this@Peripheral.notifyChannel == null){
                 return
             }
-            println("Sending notification")
             val notification = JSObject();
             notification.put("uuid",characteristic.uuid)
             notification.put("data",base64Encoder.encodeToString(value))
