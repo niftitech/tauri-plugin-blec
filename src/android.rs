@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use base64::Engine;
 use btleplug::{
     api::{
         BDAddr, CentralEvent, CentralState, CharPropFlags, Characteristic, Descriptor,
@@ -169,6 +170,36 @@ impl btleplug::api::Manager for Manager {
     }
 }
 
+fn deserialize_base64<'a, D>(deserializer: D) -> std::result::Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'a>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(base64::engine::general_purpose::STANDARD
+        .decode(s)
+        .map_err(serde::de::Error::custom)?)
+}
+
+fn deserialize_base64_map<'a, D, K>(
+    deserializer: D,
+) -> std::result::Result<HashMap<K, Vec<u8>>, D::Error>
+where
+    D: serde::Deserializer<'a>,
+    K: serde::Deserialize<'a> + std::hash::Hash + std::cmp::Eq,
+{
+    let map: HashMap<K, String> = serde::Deserialize::deserialize(deserializer)?;
+    let mut res = HashMap::new();
+    for (k, v) in map {
+        res.insert(
+            k,
+            base64::engine::general_purpose::STANDARD
+                .decode(v)
+                .map_err(serde::de::Error::custom)?,
+        );
+    }
+    Ok(res)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Peripheral {
@@ -176,9 +207,9 @@ pub struct Peripheral {
     address: BDAddr,
     name: String,
     rssi: i16,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_base64_map")]
     manufacturer_data: HashMap<u16, Vec<u8>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_base64_map")]
     service_data: HashMap<Uuid, Vec<u8>>,
     #[serde(default)]
     services: Vec<Uuid>,
@@ -355,6 +386,7 @@ impl btleplug::api::Peripheral for Peripheral {
     async fn read(&self, characteristic: &Characteristic) -> Result<Vec<u8>> {
         #[derive(serde::Deserialize)]
         struct ReadResult {
+            #[serde(deserialize_with = "deserialize_base64")]
             value: Vec<u8>,
         }
         let res: ReadResult = get_handle()
@@ -401,6 +433,7 @@ impl btleplug::api::Peripheral for Peripheral {
         #[serde(rename_all = "camelCase")]
         struct Notification {
             uuid: Uuid,
+            #[serde(deserialize_with = "deserialize_base64")]
             data: Vec<u8>,
         }
         #[derive(serde::Serialize)]

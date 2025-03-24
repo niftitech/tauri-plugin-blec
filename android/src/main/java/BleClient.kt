@@ -31,6 +31,7 @@ import app.tauri.plugin.Channel
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
+import java.util.Base64
 
 class BleDevice(
     val address: String,
@@ -41,6 +42,8 @@ class BleDevice(
     private val serviceData: Map<ParcelUuid, ByteArray>?,
     private val services: List<ParcelUuid>?
 ){
+    private val base64Encoder: Base64.Encoder = Base64.getEncoder()
+
     fun toJsObject():JSObject{
         val obj = JSObject()
         obj.put("address",address)
@@ -64,13 +67,7 @@ class BleDevice(
                 val key = manufacturerData.keyAt(i)
                 // get the object by the key.
                 val value = manufacturerData.get(key)
-                val arr = JSArray()
-                for (element in value){
-                    // toInt is needed to generate number in Json
-                    // the UByte is serialized as string
-                    arr.put(element.toUByte().toInt())
-                }
-                subObj.put(key.toString(),arr)
+                subObj.put(key.toString(),base64Encoder.encodeToString(value))
             }
             subObj
         } else { null }
@@ -79,13 +76,7 @@ class BleDevice(
         val serviceData = if (serviceData != null) {
             val subObj = JSObject()
             for ((key, value) in serviceData){
-                val arr = JSArray()
-                for (element in value){
-                    // toInt is needed to generate number in Json
-                    // the UByte is serialized as string
-                    arr.put(element.toUByte().toInt())
-                }
-                subObj.put(key.toString(),arr)
+                subObj.put(key.toString(),base64Encoder.encodeToString(value))
             }
             subObj
         } else { null }

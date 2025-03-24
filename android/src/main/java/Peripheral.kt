@@ -13,19 +13,13 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import com.plugin.blec.BleClientPlugin
 import org.json.JSONArray
+import java.util.Base64
 import java.util.UUID
 
 
-private fun bytesToJson(bytes: ByteArray):JSONArray{
-    val array = JSONArray()
-    for (byte in bytes){
-        array.put((byte.toUByte().toInt()))
-    }
-    return array
-}
-
 class Peripheral(private val activity: Activity, private val device: BluetoothDevice, private val plugin: BleClientPlugin) {
     private val CLIENT_CHARACTERISTIC_CONFIGURATION_DESCRIPTOR: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+    private val base64Encoder: Base64.Encoder = Base64.getEncoder()
 
     private var connected = false
     private var gatt: BluetoothGatt? = null
@@ -96,7 +90,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             println("Sending notification")
             val notification = JSObject();
             notification.put("uuid",characteristic.uuid)
-            notification.put("data",bytesToJson(value))
+            notification.put("data",base64Encoder.encodeToString(value))
             this@Peripheral.notifyChannel!!.send(notification)
         }
 
@@ -137,7 +131,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
                         invoke.reject("Read from characteristic $id failed with status $status")
                     } else {
                         val res = JSObject()
-                        res.put("value", bytesToJson(value))
+                        res.put("value", base64Encoder.encodeToString(value))
                         invoke.resolve(res)
                     }
                 }
