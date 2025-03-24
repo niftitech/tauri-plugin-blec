@@ -57,7 +57,7 @@ Add the CoreBluetooth Framework in your xcode procjet:
 
 
 ## Usage in Frontend
-See `examples/plugin-blec-example` for a full working example that scans for devices, connects and sends/receives data.
+See [examples/plugin-blec-example] for a full working example that scans for devices, connects and sends/receives data.
 In order to use it run `examples/test-server` on another device and connect to that server.
 
 Short example:
