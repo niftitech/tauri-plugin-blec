@@ -11,7 +11,7 @@ use std::time::Duration;
 use tauri::async_runtime;
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::time::sleep;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 #[cfg(target_os = "android")]
@@ -766,13 +766,25 @@ async fn listen_notify(dev: Option<Peripheral>, listeners: Arc<Mutex<Vec<Listene
         .notifications()
         .await
         .expect("failed to get notifications stream");
+    let mut handles: HashMap<Uuid, tokio::task::JoinHandle<()>> = HashMap::new();
     while let Some(data) = stream.next().await {
         for l in listeners.lock().await.iter() {
-            info!("listener.uuid: {:?}", l.uuid);
             if l.uuid == data.uuid {
                 let data = data.value.clone();
                 let cb = l.callback.clone();
-                async_runtime::spawn_blocking(move || cb(&data));
+                // wait for running callback first
+                if let Some(handle) = handles.remove(&l.uuid) {
+                    let _ = handle.await;
+                    trace!("previous callback for {:?} finished", l.uuid);
+                }
+                // insert new callback
+                trace!("starting new callback for {:?}", l.uuid);
+                handles.insert(
+                    l.uuid,
+                    tokio::task::spawn_blocking(move || {
+                        cb(&data);
+                    }),
+                );
             }
         }
     }
