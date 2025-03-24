@@ -21,6 +21,7 @@ class ConnectParams{
 @TauriPlugin
 class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     var devices: MutableMap<String, Peripheral> = mutableMapOf();
+    var connected_devices: MutableMap<String, Peripheral> = mutableMapOf();
     var eventChannel: Channel? = null;
     private val client = BleClient(activity,this)
 
@@ -48,6 +49,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
             invoke.reject("Device not found")
             return
         }
+        this.connected_devices[args.address] = device;
         device.connect(invoke)
     }
 
@@ -59,13 +61,14 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
             invoke.reject("Device not found")
             return
         }
+        this.connected_devices.remove(args.address)
         device.disconnect(invoke)
     }
 
     @Command
     fun is_connected(invoke: Invoke){
         val args = invoke.parseArgs(ConnectParams::class.java)
-        val device = this.devices[args.address]
+        val device = this.connected_devices[args.address]
         val res = JSObject()
         if (device == null){
             res.put("result", false)
@@ -78,7 +81,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     @Command
     fun discover_services(invoke:Invoke){
         val args = invoke.parseArgs(ConnectParams::class.java)
-        val device = this.devices[args.address]
+        val device = this.connected_devices[args.address]
         if (device == null){
             invoke.reject("Device not found")
             return
@@ -89,7 +92,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     @Command
     fun services(invoke:Invoke){
         val args = invoke.parseArgs(ConnectParams::class.java)
-        val device = this.devices[args.address]
+        val device = this.connected_devices[args.address]
         if (device == null){
             invoke.reject("Device not found")
             return
@@ -106,7 +109,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     @Command
     fun notifications(invoke:Invoke){
         val args = invoke.parseArgs(NotifyParams::class.java)
-        val device = this.devices[args.address]
+        val device = this.connected_devices[args.address]
         if (device == null){
             invoke.reject("Device not found")
             return
@@ -125,7 +128,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     @Command
     fun write(invoke:Invoke){
         val args = invoke.parseArgs(WriteParams::class.java)
-        val device = this.devices[args.address]
+        val device = this.connected_devices[args.address]
         if (device == null){
             invoke.reject("Device not found")
             return
@@ -141,7 +144,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     @Command
     fun read(invoke: Invoke){
         val args = invoke.parseArgs(ReadParams::class.java)
-        val device = this.devices[args.address]
+        val device = this.connected_devices[args.address]
         if (device == null){
             invoke.reject("Device not found")
             return
@@ -152,7 +155,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     @Command
     fun subscribe(invoke: Invoke){
         val args = invoke.parseArgs(ReadParams::class.java)
-        val device = this.devices[args.address]
+        val device = this.connected_devices[args.address]
         if (device == null){
             invoke.reject("Device not found")
             return
@@ -163,7 +166,7 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
     @Command
     fun unsubscribe(invoke: Invoke){
         val args = invoke.parseArgs(ReadParams::class.java)
-        val device = this.devices[args.address]
+        val device = this.connected_devices[args.address]
         if (device == null){
             invoke.reject("Device not found")
             return
