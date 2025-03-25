@@ -31,6 +31,7 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
     private val onReadInvoke:MutableMap<UUID,Invoke> = mutableMapOf()
     private val onWriteInvoke:MutableMap<UUID,Invoke> = mutableMapOf()
     private var onDescriptorInvoke: Invoke? = null
+    private var onMtuInvoke: Invoke? = null
 
     private enum class Event{
         DeviceConnected,
@@ -150,6 +151,23 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             } else {
                 this@Peripheral.onDescriptorInvoke?.resolve()
             }
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
+            val invoke = this@Peripheral.onMtuInvoke
+            if (invoke == null) {
+                Log.e("Peripheral", "Did not find tauri invoke obj for MTU change")
+                return
+            }
+            
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                invoke.reject("MTU change failed with status: $status")
+            } else {
+                val res = JSObject()
+                res.put("result", mtu)
+                invoke.resolve(res)
+            }
+            this@Peripheral.onMtuInvoke = null
         }
     }
 
@@ -336,6 +354,24 @@ class Peripheral(private val activity: Activity, private val device: BluetoothDe
             descriptor.value = data
             @Suppress("DEPRECATION")
             gatt.writeDescriptor(descriptor)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun requestMtu(invoke: Invoke, mtu: Int) {
+        val gatt = this.gatt
+        if (gatt == null) {
+            invoke.reject("No gatt server connected")
+            return
+        }
+        
+        // Store the invoke to be used when the callback is triggered
+        this.onMtuInvoke = invoke
+        
+        // Request the MTU change
+        if (!gatt.requestMtu(mtu)) {
+            invoke.reject("Failed to request MTU change")
+            this.onMtuInvoke = null
         }
     }
 }

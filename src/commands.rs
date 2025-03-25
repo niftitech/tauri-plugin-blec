@@ -208,6 +208,15 @@ pub(crate) fn check_permissions() -> Result<bool> {
     crate::check_permissions()
 }
 
+#[command]
+pub(crate) async fn request_mtu<R: Runtime>(_app: AppHandle<R>, mtu: u16) -> Result<u16> {
+    tracing::info!("Requesting MTU change to {}", mtu);
+    let handler = get_handler()?;
+    let agreed_mtu = handler.request_mtu(mtu).await?;
+    tracing::info!("MTU negotiated to {}", agreed_mtu);
+    Ok(agreed_mtu)
+}
+
 pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
     tauri::generate_handler![
         scan,
@@ -223,6 +232,7 @@ pub fn commands<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool {
         subscribe_string,
         unsubscribe,
         scanning_state,
-        check_permissions
+        check_permissions,
+        request_mtu
     ]
 }

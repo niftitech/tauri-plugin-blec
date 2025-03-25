@@ -181,4 +181,21 @@ class BleClientPlugin(private val activity: Activity): Plugin(activity) {
         ret.put("result",granted)
         invoke.resolve(ret);
     }
+
+    @InvokeArg
+    class MtuParams{
+        val address: String = ""
+        val mtu: Int = 0
+    }
+
+    @Command
+    fun request_mtu(invoke: Invoke){
+        val args = invoke.parseArgs(MtuParams::class.java)
+        val device = this.connected_devices[args.address]
+        if (device == null){
+            invoke.reject("Device not found")
+            return
+        }
+        device.requestMtu(invoke, args.mtu)
+    }
 }

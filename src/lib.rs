@@ -56,6 +56,16 @@ pub fn check_permissions() -> Result<bool, Error> {
     return Ok(true);
 }
 
+/// Request to change the MTU size for the currently connected peripheral
+/// Returns the agreed MTU size, or an error if the request failed or if no device is connected
+/// Only available on Android
+/// # Errors
+/// Returns an error if no device is connected or if the request fails
+pub async fn request_mtu(mtu: u16) -> Result<u16, Error> {
+    let handler = get_handler()?;
+    handler.request_mtu(mtu).await
+}
+
 async fn handle_events() {
     let handler = get_handler().expect("failed to get handler");
     let stream = handler

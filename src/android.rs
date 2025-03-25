@@ -479,3 +479,31 @@ impl btleplug::api::Peripheral for Peripheral {
         todo!()
     }
 }
+
+/// Extension trait to add MTU negotiation functionality
+pub trait MtuExt {
+    /// Request to change the MTU size for this peripheral
+    /// Returns the agreed MTU size, or an error if the request failed
+    fn request_mtu(&self, mtu: u16) -> futures::future::BoxFuture<'_, Result<u16>>;
+}
+
+impl MtuExt for Peripheral {
+    fn request_mtu(&self, mtu: u16) -> futures::future::BoxFuture<'_, Result<u16>> {
+        Box::pin(async move {
+            #[derive(serde::Deserialize)]
+            struct MtuResult {
+                result: u16,
+            }
+            let res: MtuResult = get_handle()
+                .run_mobile_plugin(
+                    "request_mtu",
+                    serde_json::json!({
+                        "address": self.address,
+                        "mtu": mtu,
+                    }),
+                )
+                .map_err(|e| btleplug::Error::RuntimeError(e.to_string()))?;
+            Ok(res.result)
+        })
+    }
+}

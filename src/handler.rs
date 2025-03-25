@@ -653,6 +653,41 @@ impl Handler {
         Ok(())
     }
 
+    /// Request to change the MTU size for the currently connected peripheral
+    ///
+    /// # Platform-specific behavior
+    /// - On Android: Returns the actual MTU value negotiated with the device
+    /// - On other platforms: Returns the requested MTU value (actual negotiation
+    ///   happens automatically by the OS and the real value might differ)
+    #[cfg(target_os = "android")]
+    pub async fn request_mtu(&self, mtu: u16) -> Result<u16, Error> {
+        use crate::android::MtuExt;
+
+        let dev = self.connected_dev.lock().await;
+        let dev = dev.as_ref().ok_or(Error::NoDeviceConnected)?;
+
+        // Get the device address
+        let addr = fmt_addr(dev.address());
+
+        // Get the Android peripheral from our devices HashMap
+        // Use a let binding to avoid the temporary value being dropped while borrowed
+        let devices_lock = self.devices.lock().await;
+        let android_dev = devices_lock
+            .get(&addr)
+            .ok_or(Error::UnknownPeripheral(addr.clone()))?;
+
+        // Call the extension trait method
+        let agreed_mtu = android_dev.request_mtu(mtu).await?;
+        Ok(agreed_mtu)
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub async fn request_mtu(&self, mtu: u16) -> Result<u16, Error> {
+        // On non-Android platforms, just return the requested MTU
+        // as most platforms handle MTU negotiation automatically
+        Ok(mtu)
+    }
+
     pub(super) async fn get_event_stream(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = CentralEvent> + Send>>, Error> {
